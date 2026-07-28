@@ -1,0 +1,4 @@
+/* L'icône du lanceur est celle du programme : c'est lui que l'utilisateur voit dans l'Explorateur,
+ * le vrai exécutable étant rangé dans app\.
+ */
+IDI_ICON1 ICON DISCARDABLE "../respawnIrc/rirc.ico"

@@ -146,7 +146,11 @@ Write-Host "== Assemblage du dossier distribuable"
 # L'archive contient un unique dossier RespawnIRC, à décompresser tel quel : l'application et ses
 # données doivent rester ensemble.
 Remove-Item -Recurse -Force $distDir -ErrorAction SilentlyContinue
-$imageDir = Join-Path $distDir 'image\RespawnIRC'
+# Le programme et ses quelque soixante-dix fichiers vont dans app\, et la racine du dossier ne
+# contient que le lanceur : les DLL ne peuvent pas être rangées ailleurs que dans le dossier de
+# l'exécutable qu'elles servent (voir launcher\launcher.c), c'est donc l'exécutable qui descend.
+$rootDir = Join-Path $distDir 'image\RespawnIRC'
+$imageDir = Join-Path $rootDir 'app'
 New-Item -ItemType Directory -Force -Path $imageDir | Out-Null
 
 Copy-Item (Join-Path $buildDir 'release\RespawnIRC.exe') $imageDir
@@ -218,8 +222,34 @@ else
 Copy-Item (Join-Path $repoDir 'resources\*') (Join-Path $imageDir 'resources') -Recurse -Force
 Copy-Item (Join-Path $repoDir 'themes') $imageDir -Recurse -Force
 
+Write-Host "== Lanceur"
+# Compilé en /MT : avec /MD il dépendrait de vcruntime140.dll, qui est dans app\ et pas à côté de
+# lui, et il ne démarrerait pas. Ainsi il ne dépend que de USER32 et KERNEL32, présentes partout.
+$launcherDir = Join-Path $repoDir 'launcher'
+# Les chemins sont assemblés avant l'appel : collé à une option comme /OUT:, un (Join-Path ...) est
+# bien évalué par PowerShell mais passé en argument séparé, et l'éditeur de liens ne voit qu'un
+# /OUT: vide.
+$resPath = Join-Path $launcherDir 'launcher.res'
+$outPath = Join-Path $rootDir 'RespawnIRC.exe'
+Push-Location $launcherDir
+
+try
+{
+    Invoke-BuildTool -Name 'rc' -Command { rc /nologo /fo $resPath 'launcher.rc' }
+
+    Invoke-BuildTool -Name 'cl (lanceur)' -Command {
+        cl /nologo /O2 /MT 'launcher.c' $resPath /link /SUBSYSTEM:WINDOWS user32.lib "/OUT:$outPath"
+    }
+}
+finally
+{
+    Pop-Location
+    # Les fichiers intermédiaires du lanceur ne doivent pas rester dans le dossier de sources.
+    Get-ChildItem $launcherDir -File | Where-Object { $_.Extension -in '.obj', '.res' } | Remove-Item -Force
+}
+
 $zipPath = Join-Path $distDir "RespawnIRC-$version-windows.zip"
-Compress-Archive -Path (Join-Path $distDir 'image\RespawnIRC') -DestinationPath $zipPath
+Compress-Archive -Path $rootDir -DestinationPath $zipPath
 Remove-Item -Recurse -Force (Join-Path $distDir 'image')
 
 Write-Host "== Terminé : $zipPath"

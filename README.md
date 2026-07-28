@@ -105,7 +105,17 @@ Les tests se compilent de la même façon :
 
 Le script compile, appelle `windeployqt`, allège le résultat, ajoute les bibliothèques d'exécution nécessaires et fabrique `dist\RespawnIRC-<version>-windows.zip`. Sans argument, il utilise le Qt dont le `qmake` est dans le `PATH` ; il retrouve tout seul l'environnement MSVC avec `vswhere`, il n'a donc pas besoin d'être lancé depuis une invite de commandes développeur.
 
-L'archive contient un unique dossier `RespawnIRC` avec l'application **et** les dossiers `resources` et `themes` : c'est ce dossier entier qu'il faut décompresser quelque part. L'application et ses données ne peuvent pas être séparées, parce que le programme écrit dedans — les stickers, notamment, sont téléchargés dans `resources\stickers\`. À noter que `windeployqt` crée lui aussi un dossier `resources` pour QtWebEngine : les deux contenus cohabitent dans le même dossier, aucun nom de fichier ne se chevauchant.
+L'archive contient un unique dossier `RespawnIRC`, à décompresser quelque part tel quel, et dont la racine ne contient que deux choses :
+
+    RespawnIRC\
+        RespawnIRC.exe      le lanceur, à double-cliquer
+        app\                le programme, ses DLL, resources\ et themes\
+
+Cette disposition tient à une contrainte de Windows : **les DLL ne peuvent pas être rangées dans un sous-dossier en laissant l'exécutable au-dessus**. Le chargeur de Windows résout les imports de `Qt5Core.dll` et des autres au démarrage du processus, avant que le code du programme tourne, et il les cherche dans le dossier de l'exécutable ; ni `qt.conf` ni `AddDllDirectory` n'y changent rien, et les redirecteurs `api-ms-win-*` de l'Universal CRT sont encore plus stricts avant Windows 8. C'est donc l'exécutable qui descend dans `app\` avec tout le reste, et `launcher\launcher.c` — un lanceur de soixante lignes qui ne dépend que de USER32 et KERNEL32 — reste seul à la racine pour qu'il n'y ait qu'une chose à cliquer.
+
+Conséquence à connaître : `config.ini`, `logs\` et les stickers téléchargés atterrissent dans `app\`, et non plus à côté du programme comme sous Linux et macOS. C'est le prix d'une racine propre.
+
+L'application et ses données ne peuvent pas être séparées, parce que le programme écrit dedans — les stickers, notamment, sont téléchargés dans `resources\stickers\`. À noter que `windeployqt` crée lui aussi un dossier `resources` pour QtWebEngine : les deux contenus cohabitent dans le même dossier, aucun nom de fichier ne se chevauchant.
 
 Trois dossiers sont allégés parce que `windeployqt` copie tout par défaut : les traductions de QtWebEngine sont réduites au français et à l'anglais qui lui sert de repli, celles de Qt au seul français, et les outils de développement de Chromium sont retirés. Cela représente une vingtaine de mégaoctets. En revanche `opengl32sw.dll` est conservé malgré ses 20 Mo : c'est le rendu OpenGL logiciel, seul recours sur une machine sans pilote OpenGL utilisable, ce qui est courant sur les vieilles configurations et les machines virtuelles visées par une cible Windows 7. L'essentiel du poids restant est incompressible, `Qt5WebEngineCore.dll` pesant à lui seul près de 100 Mo.
 

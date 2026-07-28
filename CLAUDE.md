@@ -55,6 +55,14 @@ ne se compilant qu'avec MSVC. Le README détaille la mise en place ; les pièges
 - `windeployqt` crée un dossier `resources/` pour QtWebEngine, exactement le nom du dossier de
   données du programme, et au même endroit puisque `pathTool::dataDirPath()` renvoie le dossier de
   l'exécutable. Les deux contenus doivent **fusionner**, pas se remplacer ;
+- **les DLL ne peuvent pas descendre dans un sous-dossier en laissant l'exécutable au-dessus** : le
+  chargeur de Windows résout les imports statiques avant que le code tourne, et cherche à côté de
+  l'exécutable ; `qt.conf` ne pilote que les greffons et `AddDllDirectory` arrive trop tard. C'est
+  pour ça que le dossier distribuable met tout dans `app\` et ne laisse que `launcher\launcher.c` à
+  la racine. Ne pas essayer de « ranger » les DLL, ça ne marche pas, et l'Universal CRT est encore
+  plus strict que Qt là-dessus avant Windows 8 ;
+- le lanceur se compile en **`/MT`** : en `/MD` il dépendrait de `vcruntime140.dll`, qui est dans
+  `app\` et pas à côté de lui, et il ne démarrerait pas ;
 - `dist-windows.ps1` est en UTF-8 **avec BOM** : PowerShell 5.1 lit un `.ps1` comme de l'ANSI sans
   lui, et tous les accents des messages sont abîmés. Ne pas réenregistrer le fichier sans le BOM ;
 - toujours dans PowerShell 5.1, `qmake`, `nmake` et `windeployqt` écrivent leur progression sur la
