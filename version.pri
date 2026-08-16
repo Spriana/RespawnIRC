@@ -10,4 +10,4 @@
 # Conséquence à connaître : le programme ne se compile plus sans qmake, le numéro n'étant plus dans
 # les sources. C'est sans objet ici, qmake étant le seul système de compilation du dépôt.
 
-RESPAWNIRC_VERSION = 3.1.17
+RESPAWNIRC_VERSION = 3.2.0
