@@ -23,7 +23,9 @@ manageShortcutWindowClass::manageShortcutWindowClass(QWidget* parent) : baseDial
     shortcutsListView = new QTreeView(this);
     shortcutsItemModel = new QStandardItemModel(shortcutsListView);
     shortcutsListView->setModel(shortcutsItemModel);
-    shortcutsListView->header()->setDefaultSectionSize(shortcutsListView->header()->defaultSectionSize() * 1.5);
+    /* Le * 1.5 donne un double, que setDefaultSectionSize tronque. C'est voulu et antérieur au
+     * portage — il ne s'agit que de rendre la troncature explicite. */
+    shortcutsListView->header()->setDefaultSectionSize(static_cast<int>(shortcutsListView->header()->defaultSectionSize() * 1.5));
     shortcutsListView->setRootIsDecorated(false);
     shortcutsListView->setEditTriggers(QAbstractItemView::NoEditTriggers);
 

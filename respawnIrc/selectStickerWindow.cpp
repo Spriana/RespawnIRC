@@ -95,7 +95,7 @@ selectStickerWindowClass::selectStickerWindowClass(QWidget* parent) : baseDialog
         }
         else if(oldLabelSelected >= listOfLabels.size())
         {
-            oldLabelSelected = listOfLabels.size() - 1;
+            oldLabelSelected = static_cast<int>(listOfLabels.size() - 1);
         }
     }
 
@@ -122,7 +122,7 @@ clickableLabelClass* selectStickerWindowClass::createQLabelForStickerTypeWithThe
 {
     QImage image;
     QPalette palette;
-    clickableLabelClass* imageView = new clickableLabelClass(listOfLabels.size(), parent);
+    clickableLabelClass* imageView = new clickableLabelClass(static_cast<int>(listOfLabels.size()), parent);
 
     image.load(pathTool::pathForReading("resources/" + imageName));
     image = image.scaled(50, 50, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);

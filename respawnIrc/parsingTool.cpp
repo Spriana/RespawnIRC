@@ -879,7 +879,7 @@ QString parsingTool::makeAbsoluteUrl(const QString& url, const QString& website)
 
 QString parsingTool::removeSchemeOfUrl(const QString& url)
 {
-    int positionOfScheme = url.indexOf("//");
+    qsizetype positionOfScheme = url.indexOf("//");
 
     if(positionOfScheme == -1)
     {
@@ -892,7 +892,7 @@ QString parsingTool::removeSchemeOfUrl(const QString& url)
 /* Les dates de JVC sont de la forme « 02 juin 2026 à 22:25:06 ». */
 QString parsingTool::getHourOfDate(const QString& wholeDate)
 {
-    int positionOfHour = wholeDate.lastIndexOf(" à ");
+    qsizetype positionOfHour = wholeDate.lastIndexOf(" à ");
 
     if(positionOfHour == -1)
     {
@@ -980,7 +980,7 @@ QString parsingTool::jvfLinkToJvcLink(const QString& jvfTopicLink)
 QString parsingTool::normalAvatarLinkToHDLink(const QString& avatarLink)
 {
     QString newAvatarLink = avatarLink;
-    int sizePos = avatarLink.indexOf("-sm");
+    qsizetype sizePos = avatarLink.indexOf("-sm");
 
     if(sizePos != -1)
     {
@@ -1149,7 +1149,7 @@ QString parsingTool::parsingAjaxMessages(QString thisMessage)
     thisMessage.replace("\\\\", "\\");
 
     QRegularExpressionMatchIterator matchIterator = expForUnicodeInText.globalMatch(thisMessage);
-    int lenghtChanged = 0;
+    qsizetype lenghtChanged = 0;
     while(matchIterator.hasNext())
     {
         QRegularExpressionMatch match = matchIterator.next();
@@ -1260,7 +1260,7 @@ void parsingTool::removeAllOverlySpoils(QString& source)
 {
     QRegularExpressionMatch spoilOverlyMatcher = expForOverlySpoils.match(source);
     int currentSpoilTagDeepness = 0;
-    int lastOffsetOfTag = 0;
+    qsizetype lastOffsetOfTag = 0;
 
     while(spoilOverlyMatcher.hasMatch() == true)
     {

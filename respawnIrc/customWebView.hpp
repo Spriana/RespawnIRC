@@ -24,7 +24,7 @@ private slots:
     void newUrlVisited(const QUrl& thisUrl);
 private:
     QVector<QUrl> listOfVisitedUrl;
-    int currentUrlID = -1;
+    qsizetype currentUrlID = -1;
     bool nextUrlChangeHasToBeSaved = true;
 };
 

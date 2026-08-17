@@ -280,10 +280,10 @@ void getTopicMessagesClass::analyzeMessages()
 
     if(firstTimeGetMessages == false || newTopicLink.isEmpty() == true)
     {
-        int numberOfMessagesInLastPage = 0;
+        qsizetype numberOfMessagesInLastPage = 0;
         QList<messageStruct> listOfEntireMessages;
 
-        for(int i = listOfPageSource.size() - 1; i >= 0; --i)
+        for(qsizetype i = listOfPageSource.size() - 1; i >= 0; --i)
         {
             QList<messageStruct> listForThisPage = parsingTool::getListOfEntireMessagesWithoutMessagePars(listOfPageSource[i]);
             numberOfMessagesInLastPage = listForThisPage.size();

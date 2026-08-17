@@ -151,7 +151,7 @@ QString imageDownloadToolClass::getPathOfTmpDir()
 
 int imageDownloadToolClass::getNumberOfDownloadRemaining()
 {
-    return listOfImagesUrlNeedDownload.size();
+    return static_cast<int>(listOfImagesUrlNeedDownload.size());
 }
 
 bool imageDownloadToolClass::checkIfImageUrlExist(QString imageUrl, const imageDownloadRuleStruct& thisRule, QString ruleName)

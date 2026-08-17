@@ -37,7 +37,7 @@ void shortcutTool::loadShortcutRule(QString ruleName, QString beforeBase, QStrin
         while(textStream.atEnd() == false)
         {
             QString thisLine = textStream.readLine();
-            int index = thisLine.indexOf(' ');
+            qsizetype index = thisLine.indexOf(' ');
 
             if(index > 0 && index < thisLine.size())
             {

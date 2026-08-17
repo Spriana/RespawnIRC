@@ -215,7 +215,7 @@ void tabViewTopicInfosClass::addNewTabWithPseudo(QString useThisPseudo)
     connect(listOfContainerForTopicsInfos.back(), &containerForTopicsInfosClass::topicNeedChanged, this, &tabViewTopicInfosClass::setNewTopicForCurrentTab);
     connect(&listOfContainerForTopicsInfos.back()->getShowTopic(), &showTopicClass::newCookieHasToBeSet, this, &tabViewTopicInfosClass::setNewCookieForPseudo);
     tabList->addTab(listOfContainerForTopicsInfos.back(), "Onglet " + QString::number(listOfContainerForTopicsInfos.size()));
-    tabList->setCurrentIndex(listOfContainerForTopicsInfos.size() - 1);
+    tabList->setCurrentIndex(static_cast<int>(listOfContainerForTopicsInfos.size() - 1));
 }
 
 bool tabViewTopicInfosClass::getTabListIsEmpty() const

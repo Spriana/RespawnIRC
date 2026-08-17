@@ -69,7 +69,7 @@ void selectThemeWindowClass::loadListOfThemes()
     modelForListViewOfTheme->setStringList(listOfTheme);
 
     /* Valide même si indexof renvoi -1 car il faut associer l'index actuel à un index invalide dans ce cas */
-    listViewOfTheme->setCurrentIndex(modelForListViewOfTheme->index(listOfTheme.indexOf(currentThemeName->text())));
+    listViewOfTheme->setCurrentIndex(modelForListViewOfTheme->index(static_cast<int>(listOfTheme.indexOf(currentThemeName->text()))));
 
     changeThemeInfos(listViewOfTheme->currentIndex());
 }

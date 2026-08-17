@@ -237,7 +237,7 @@ void multiTypeTextBoxClass::moveCursor(QTextCursor::MoveOperation operation, int
         }
         else if(operation == QTextCursor::EndOfLine)
         {
-            lineEdit->setCursorPosition(lineEdit->text().size());
+            lineEdit->setCursorPosition(static_cast<int>(lineEdit->text().size()));
         }
     }
 }

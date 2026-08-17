@@ -280,18 +280,20 @@ void mainWindowClass::useFavoriteClicked()
 {
     QAction* thisAction = dynamic_cast<QAction*>(sender());
 
-    respawnIrc->useThisFavorite(vectorOfUseFavorite.indexOf(thisAction));
+    /* indexOf rend une qsizetype sous Qt 6 ; les trois fonctions de favoris prennent un int, et le
+     * cast est sans risque : il s'agit d'un numéro d'emplacement, et il y en a une poignée. */
+    respawnIrc->useThisFavorite(static_cast<int>(vectorOfUseFavorite.indexOf(thisAction)));
 }
 
 void mainWindowClass::addFavoriteClicked()
 {
     QAction* thisAction = dynamic_cast<QAction*>(sender());
-    QString newTopicName = respawnIrc->addThisFavorite(vectorOfAddFavorite.indexOf(thisAction));
+    QString newTopicName = respawnIrc->addThisFavorite(static_cast<int>(vectorOfAddFavorite.indexOf(thisAction)));
 
     if(newTopicName.isEmpty() == false)
     {
         QFont thisFont;
-        int index = vectorOfAddFavorite.indexOf(thisAction);
+        qsizetype index = vectorOfAddFavorite.indexOf(thisAction);
 
         vectorOfAddFavorite[index]->setText(newTopicName);
 
@@ -311,9 +313,9 @@ void mainWindowClass::delFavoriteClicked()
 {
     QFont thisFont;
     QAction* thisAction = dynamic_cast<QAction*>(sender());
-    int index = vectorOfDelFavorite.indexOf(thisAction);
+    qsizetype index = vectorOfDelFavorite.indexOf(thisAction);
 
-    respawnIrc->delThisFavorite(index);
+    respawnIrc->delThisFavorite(static_cast<int>(index));
 
     thisFont = vectorOfDelFavorite[index]->font();
     thisFont.setItalic(true);
