@@ -8,6 +8,7 @@
 #include "imageDownloadTool.hpp"
 #include "parsingTool.hpp"
 #include "pathTool.hpp"
+#include "logTool.hpp"
 
 imageDownloadToolClass::imageDownloadToolClass(QObject* parent) : QObject(parent)
 {
@@ -282,21 +283,32 @@ void imageDownloadToolClass::analyzeLatestImageDownloaded()
                 QString imagePath = (basePath + ruleIte.value().directoryPath + convertUrlToFilePath(pathFile) + ruleIte.value().appendAfterName);
                 newDir.mkpath(removeLastLevelOfFilePath(imagePath));
                 newImageFile.setFileName(imagePath);
-                newImageFile.open(QIODevice::WriteOnly);
 
-                if(ruleIte.value().preferedImageWidth > 0 && ruleIte.value().preferedImageHeight > 0)
+                /* QFile::open est [[nodiscard]] sous Qt 6, et l'attribut a mis le doigt sur un vrai
+                 * défaut : le résultat était ignoré, puis on écrivait quand même. Une ouverture
+                 * ratée — dossier du cache non inscriptible, disque plein — ne produisait donc rien
+                 * et l'image était malgré tout ajoutée à la liste de celles qu'on possède, si bien
+                 * qu'elle n'était jamais retéléchargée et restait manquante pour toujours. */
+                if(newImageFile.open(QIODevice::WriteOnly) == true)
                 {
-                    image = image.scaled(ruleIte.value().preferedImageWidth, ruleIte.value().preferedImageHeight,
-                                         ((ruleIte.value().keepAspectRatio == true) ? Qt::KeepAspectRatio : Qt::IgnoreAspectRatio), Qt::SmoothTransformation);
-                    image.save(&newImageFile, 0, 100);
+                    if(ruleIte.value().preferedImageWidth > 0 && ruleIte.value().preferedImageHeight > 0)
+                    {
+                        image = image.scaled(ruleIte.value().preferedImageWidth, ruleIte.value().preferedImageHeight,
+                                             ((ruleIte.value().keepAspectRatio == true) ? Qt::KeepAspectRatio : Qt::IgnoreAspectRatio), Qt::SmoothTransformation);
+                        image.save(&newImageFile, 0, 100);
+                    }
+                    else
+                    {
+                        newImageFile.write(imageInBytes);
+                    }
+
+                    newImageFile.close();
+                    listOfImagesIte.value().append(convertUrlToFilePath(listOfImagesUrlNeedDownload.front().linkOfImage));
                 }
                 else
                 {
-                    newImageFile.write(imageInBytes);
+                    qWarning(logNetwork) << "Impossible d'ouvrir en écriture le fichier de l'image :" << imagePath;
                 }
-
-                newImageFile.close();
-                listOfImagesIte.value().append(convertUrlToFilePath(listOfImagesUrlNeedDownload.front().linkOfImage));
             }
         }
     }
