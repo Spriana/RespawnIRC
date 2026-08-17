@@ -1,5 +1,6 @@
 #include <QCoreApplication>
 #include <QFile>
+#include <QStringConverter>
 #include <QTextStream>
 
 #include "testTool.hpp"
@@ -17,8 +18,8 @@ namespace
     QTextStream& out()
     {
         static QTextStream stream(stdout);
-        static bool codecIsSet = [&]() { stream.setCodec("UTF-8"); return true; }();
-        Q_UNUSED(codecIsSet)
+        static bool encodingIsSet = [&]() { stream.setEncoding(QStringConverter::Utf8); return true; }();
+        Q_UNUSED(encodingIsSet)
         return stream;
     }
 }
@@ -104,8 +105,11 @@ QString testTool::loadFixture(const QString& nameOfFile)
 
 int testTool::finish()
 {
-    /* QTextStream interprète un const char* en latin-1, d'où le QString explicite. */
-    out() << "\n" << checksDone << QString(" vérifications, ") << checksFailed << QString(" échec(s).\n");
+    /* Les QString explicites qui entouraient ces deux littéraux ne servent plus à rien : sous Qt 5,
+     * QTextStream décodait un const char* avec le codec du flux — le latin-1 par défaut — alors que
+     * QString(const char*) passait déjà par l'UTF-8, d'où la conversion explicite. Qt 6 suppose
+     * l'UTF-8 des deux côtés, les deux chemins sont donc devenus le même. */
+    out() << "\n" << checksDone << " vérifications, " << checksFailed << " échec(s).\n";
     out().flush();
     return (checksFailed == 0 ? 0 : 1);
 }

@@ -20,22 +20,27 @@ namespace
     const QRegularExpression expForPayload(R"rgx(window\.jvc\.forumsAppPayload\s*=\s*"([^"]*)")rgx",
                                            configDependentVar::regexpBaseOptions);
 
+    /* qHash rend un size_t sous Qt 6 et rendait un uint sous Qt 5, et la taille est une qsizetype :
+     * garder les anciens types tronquerait les deux. Ce n'est pas qu'une question d'avertissement du
+     * compilateur — l'entrée est retrouvée en comparant l'empreinte *et* la taille, donc deux pages
+     * qui se collisionneraient sur les deux rendraient le payload de l'autre. Tronquer l'empreinte de
+     * 64 à 32 bits rendait cette collision bien plus probable qu'elle n'a à l'être. */
     struct cacheEntryStruct
     {
-        uint hashOfSource = 0;
-        int sizeOfSource = 0;
+        size_t hashOfSource = 0;
+        qsizetype sizeOfSource = 0;
         QJsonObject payload;
     };
 
     QMutex mutexForCache;
     QList<cacheEntryStruct> cacheOfPayloads;
-    const int maxNumberOfCachedPayloads = 4;
+    const qsizetype maxNumberOfCachedPayloads = 4;
 
-    bool findInCache(uint hashOfSource, int sizeOfSource, QJsonObject& payloadFound)
+    bool findInCache(size_t hashOfSource, qsizetype sizeOfSource, QJsonObject& payloadFound)
     {
         QMutexLocker locker(&mutexForCache);
 
-        for(int i = 0; i < cacheOfPayloads.size(); ++i)
+        for(qsizetype i = 0; i < cacheOfPayloads.size(); ++i)
         {
             if(cacheOfPayloads[i].hashOfSource == hashOfSource && cacheOfPayloads[i].sizeOfSource == sizeOfSource)
             {
@@ -51,7 +56,7 @@ namespace
         return false;
     }
 
-    void addToCache(uint hashOfSource, int sizeOfSource, const QJsonObject& payload)
+    void addToCache(size_t hashOfSource, qsizetype sizeOfSource, const QJsonObject& payload)
     {
         QMutexLocker locker(&mutexForCache);
 
@@ -139,8 +144,8 @@ QJsonObject payloadTool::getPayload(const QString& source)
         return QJsonObject();
     }
 
-    uint hashOfSource = qHash(source);
-    int sizeOfSource = source.size();
+    size_t hashOfSource = qHash(source);
+    qsizetype sizeOfSource = source.size();
     QJsonObject cachedPayload;
 
     if(findInCache(hashOfSource, sizeOfSource, cachedPayload) == true)

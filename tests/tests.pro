@@ -1,5 +1,7 @@
 QT += core gui network
-CONFIG += console c++14
+# C++17 est le minimum exigé par Qt 6, et c'est aussi le défaut de qmake sous Qt 6 : la ligne
+# pourrait disparaître, on la garde explicite parce qu'elle documente ce que le code exige.
+CONFIG += console c++17
 CONFIG += strict_c++
 CONFIG -= app_bundle
 
@@ -11,7 +13,6 @@ TEMPLATE = app
 # lisent leurs fixtures par le chemin absolu ci-dessous.
 DESTDIR = $$PWD/../build
 
-DEFINES += QT_DEPRECATED_WARNINGS
 DEFINES += FIXTURES_PATH=\\\"$$PWD/fixtures\\\"
 
 include(../zlib.pri)
