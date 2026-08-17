@@ -11,6 +11,7 @@
 #include <QStringList>
 #include <QFocusEvent>
 #include <QHBoxLayout>
+#include <QSoundEffect>
 
 #include "sendMessages.hpp"
 #include "colorPseudoListWindow.hpp"
@@ -94,6 +95,15 @@ private:
     checkUpdateClass* checkUpdate;
     QString currentThemeName;
     QString lastClipboardDataChanged;
+    /* QSound et son play() statique ont disparu avec Qt 6. QSoundEffect n'a pas d'équivalent
+     * statique : il faut des objets qui vivent, parce que le chargement du fichier est asynchrone et
+     * qu'un objet temporaire serait détruit avant d'avoir émis le moindre son. Ils sont donc membres
+     * et leur source est posée une fois pour toutes dans le constructeur.
+     *
+     * QSoundEffect ne passe par aucun moteur média : les API de base de QtMultimedia sont intégrées
+     * à la bibliothèque principale, donc FFmpeg n'entre pas en jeu pour deux bips. */
+    QSoundEffect soundForWarn;
+    QSoundEffect soundForNewMP;
     bool beepWhenWarn;
     bool beepForNewMP;
     bool warnUser;

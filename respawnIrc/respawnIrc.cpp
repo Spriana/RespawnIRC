@@ -1,4 +1,3 @@
-#include <QSound>
 #include <QObject>
 #include <QMessageBox>
 #include <QDesktopServices>
@@ -49,6 +48,13 @@ respawnIrcClass::respawnIrcClass(QWidget* parent) : QWidget(parent)
     checkUpdate = new checkUpdateClass(this, currentVersionName);
     messagesStatus = new QLabel(this);
     numberOfConnectedAndPseudoUsed = new QLabel(this);
+
+    /* Les deux sons sont chargés une fois pour toutes ici : QSoundEffect lit le fichier de façon
+     * asynchrone, donc poser la source au moment de jouer ferait rater le premier bip. Les fichiers
+     * sont livrés à côté du programme et jamais écrits, dataDirPath() est donc le bon chemin. */
+    soundForWarn.setSource(QUrl::fromLocalFile(pathTool::dataDirPath() + "/resources/beep.wav"));
+    soundForNewMP.setSource(QUrl::fromLocalFile(pathTool::dataDirPath() + "/resources/new_mp.wav"));
+
     addButtonToButtonLayout();
 
     QHBoxLayout* infoLayout = new QHBoxLayout();
@@ -779,7 +785,7 @@ void respawnIrcClass::warnUserForNewMessages()
 
     if(QApplication::focusWidget() == nullptr && beepWhenWarn == true)
     {
-        QSound::play(pathTool::dataDirPath() + "/resources/beep.wav");
+        soundForWarn.play();
     }
 }
 
@@ -796,7 +802,7 @@ void respawnIrcClass::warnUserForNewMP(int newNumber, QString withThisPseudo)
 
     if(beepForNewMP == true && newNumber > oldValueMPNumber)
     {
-        QSound::play(pathTool::dataDirPath() + "/resources/new_mp.wav");
+        soundForNewMP.play();
     }
 }
 
