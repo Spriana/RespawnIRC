@@ -96,7 +96,9 @@ Write-Host "== Copie de Qt à côté de l'exécutable"
 # qui font doublon avec les DLL du runtime copiées plus bas. Il ne le copie que lorsque
 # VCINSTALLDIR est définie, donc uniquement quand le script est lancé après vcvars64.bat, ce qui est
 # toujours le cas ici : sans cet argument le gras dépend de la façon dont on appelle le script.
-Invoke-BuildTool -Name 'windeployqt' -Command { & $windeployqtBin --release --no-compiler-runtime (Join-Path $imageDir 'RespawnIRC.exe') }
+# --no-system-d3d-compiler écarte D3Dcompiler_47.dll, que le script effaçait auparavant après coup :
+# windeployqt de Qt 6 sait ne pas le poser, autant le lui demander que le supprimer ensuite.
+Invoke-BuildTool -Name 'windeployqt' -Command { & $windeployqtBin --release --no-compiler-runtime --no-system-d3d-compiler (Join-Path $imageDir 'RespawnIRC.exe') }
 
 Write-Host "== Allègement"
 # windeployqt copie les traductions de toutes les langues : le programme est en français, on ne
@@ -110,8 +112,22 @@ Remove-Item (Join-Path $imageDir 'resources\qtwebengine_devtools_resources.pak')
 
 # D3Dcompiler_47.dll fait partie du système depuis Windows 10 : le chargeur trouve celui de System32.
 # Il n'était embarqué que pour Windows 7, où il manque généralement. Le windeployqt de Qt 6 continue
-# de le copier — vérifié — bien que Qt 6 ait abandonné ANGLE, cette ligne reste donc utile.
-Remove-Item (Join-Path $imageDir 'D3Dcompiler_47.dll') -Force -ErrorAction SilentlyContinue
+# de le copier si on ne lui dit rien, d'où le --no-system-d3d-compiler passé plus haut — il n'y a donc
+# plus de Remove-Item pour lui.
+#
+# Deux autres options de windeployqt écarteraient 33 Mo de plus, et elles ne sont **pas** utilisées
+# faute d'avoir pu vérifier ce qu'elles coûtent :
+#
+#   --no-ffmpeg               retire les cinq DLL de FFmpeg, 18 Mo, voir la remarque plus bas ;
+#   --no-system-dxc-compiler  retire dxcompiler.dll et dxil.dll, 15,1 Mo, le compilateur de nuanceurs
+#                             de Direct3D 12 que Qt 6 embarque et que Qt 5 n'avait pas.
+#
+# Aucune de ces DLL n'est un import statique de quoi que ce soit dans l'archive — relevé au dumpbin —
+# donc les retirer **ne ferait pas échouer le démarrage** et **échapperait au contrôle de dépendances
+# de ce script**, qui ne voit que les imports statiques. Une panne n'apparaîtrait qu'au moment de
+# s'en servir : ouvrir le navigateur interne pour la première, entendre un bip pour la seconde. C'est
+# exactement la forme de régression que ce dépôt a déjà laissé sortir une fois. À essayer sur une
+# machine qui a une carte son et un affichage, pas ici.
 
 # Il n'y a plus de ligne pour opengl32sw.dll, et ce n'est pas un oubli : le windeployqt de Qt 6 ne le
 # copie plus du tout, vérifié sur cette version. Qt 6 a abandonné ANGLE, et avec lui le lot de fichiers

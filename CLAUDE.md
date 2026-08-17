@@ -52,8 +52,47 @@ Trois chantiers, laissés ouverts sciemment le 17 août 2026 et **à ne pas enta
    une archive sans `msvcp140_1.dll`, et le piège reste entier — installer les Build Tools sur la
    machine d'essai la disqualifie, en posant la famille `msvcp140*` dans `System32` ;
 3. **Écouter les deux sons**, sur une machine qui a une carte son, et en profiter pour trancher la
-   question de FFmpeg : ses cinq DLL pèsent 17,9 Mo et `dist-windows.ps1` les garde faute de pouvoir
-   vérifier ici que `QSoundEffect` s'en passe.
+   question de FFmpeg : ses cinq DLL pèsent 18 Mo et `dist-windows.ps1` les garde faute de pouvoir
+   vérifier ici que `QSoundEffect` s'en passe ;
+4. **Alléger l'archive de 33 Mo**, si les essais du point 3 et un essai du navigateur interne le
+   permettent : `windeployqt` a un `--no-ffmpeg` (18 Mo) et un `--no-system-dxc-compiler`
+   (`dxcompiler.dll` et `dxil.dll`, 15,1 Mo). Les deux sont documentés dans `dist-windows.ps1` avec
+   la raison de ne pas les avoir activés. **Le piège est identifié** : aucune de ces DLL n'est un
+   import statique, donc les retirer ne casse pas le démarrage et **échappe au contrôle au `dumpbin`
+   du script** — la panne n'apparaîtrait qu'à l'usage ;
+5. **Optionnel, et à ne pas confondre avec les précédents : remplacer QtWebEngine par WebView2.**
+   Simple note d'intention, rien n'a été étudié. L'idée se défend d'elle-même au vu des chiffres
+   ci-dessous — le seul `Qt6WebEngineCore.dll` fait 194 Mo, soit 65 % de l'archive, et WebView2
+   s'appuie sur l'Edge du système au lieu d'embarquer son propre Chromium. Ce serait aussi la fin du
+   « Chromium figé » qu'impose le gel sur 6.12, puisque celui du système est mis à jour par Windows.
+   En face : ce n'est pas un module Qt, l'intégration serait à écrire, et les deux usages actuels
+   (page de connexion et « RespawnIRC Navigator ») seraient à reprendre. **À examiner avec le
+   mainteneur avant tout travail.**
+
+### Pourquoi l'archive a doublé
+
+Mesuré sur l'archive Qt 6 : 299 Mo décompressés, dont **275,8 dans 37 fichiers à la racine**, et
+**194 pour le seul `Qt6WebEngineCore.dll`** — 65 % du total dans un fichier. Tout le reste réuni,
+Qt Core, Gui, Widgets, Network, le programme lui-même et les runtimes MSVC, pèse une trentaine de
+mégaoctets, comme sous Qt 5.
+
+L'augmentation de 140 Mo par rapport à Qt 5.15.2 se décompose ainsi, et **il n'y a pas de gras
+caché** :
+
+| Poste | Delta | Remédiable ? |
+| --- | --- | --- |
+| Chromium (`Qt5WebEngineCore` 97 Mo → `Qt6WebEngineCore` 194 Mo) | +97 Mo | non, sauf à compiler Chromium soi-même |
+| FFmpeg, absent de Qt 5 | +18 Mo | peut-être, voir le point 4 |
+| `dxcompiler.dll` et `dxil.dll`, absents de Qt 5 | +15 Mo | peut-être, voir le point 4 |
+| ANGLE (`libGLESv2`, `libEGL`), abandonné par Qt 6 | −3 Mo | déjà acquis |
+
+**Les deux tiers de l'augmentation sont donc six ans de Chromium**, ce qui est aussi le principal
+bénéfice du portage : le programme tournait sur le Chromium de 2020. Ce n'est pas un coût qu'on peut
+négocier tout en gardant QtWebEngine — d'où le point 5.
+
+Ce qui n'est **pas** la cause, et qu'il ne faut pas aller chercher : le dossier `qml/` est vide, les
+traductions sont déjà réduites au français, les outils de développement de Chromium sont déjà
+retirés, et `opengl32sw.dll` — 20 Mo sous Qt 5 — n'est plus copié du tout.
 
 Deux décisions prises et à ne pas rouvrir sans raison neuve : **le C++ reste en c++17**, minimum
 exigé par Qt 6 et défaut de qmake — le programme entier compile aussi proprement en `c++20`, essayé,
