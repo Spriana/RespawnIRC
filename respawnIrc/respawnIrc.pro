@@ -16,6 +16,15 @@ TEMPLATE = app
 # que la compilation ait lieu dans les sources ou dans build/.
 DESTDIR = $$PWD/../build
 
+# Interdit à la compilation toute API dépréciée jusqu'à la version indiquée, 6.11 ici : c'est le
+# compilateur, et non une relecture, qui garantit qu'il ne reste rien de déprécié. Le passage à 6.12
+# en septembre 2026 se fera en montant ce nombre à 0x060C00, ce qui fera apparaître d'un coup les
+# dépréciations introduites entre les deux versions — c'est tout l'intérêt de le figer ici plutôt que
+# de laisser la valeur par défaut, qui n'interdit rien.
+#
+# À ne pas confondre avec QT_DEPRECATED_WARNINGS, retiré d'ici : il n'a plus d'effet sous Qt 6.
+DEFINES += QT_DISABLE_DEPRECATED_UP_TO=0x060B00
+
 # Le numéro de version vient de version.pri, qui en est la seule source, et arrive dans le programme
 # par ce DEFINES : respawnIrc.cpp le préfixe d'un v pour en faire currentVersionName.
 include(../version.pri)

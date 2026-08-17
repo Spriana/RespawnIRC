@@ -13,6 +13,8 @@ TEMPLATE = app
 # lisent leurs fixtures par le chemin absolu ci-dessous.
 DESTDIR = $$PWD/../build
 
+# Même barrière que respawnIrc.pro, et pour la même raison : voir le commentaire là-bas.
+DEFINES += QT_DISABLE_DEPRECATED_UP_TO=0x060B00
 DEFINES += FIXTURES_PATH=\\\"$$PWD/fixtures\\\"
 
 include(../zlib.pri)
