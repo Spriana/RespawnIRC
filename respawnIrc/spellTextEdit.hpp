@@ -9,7 +9,7 @@
 #include <QStringList>
 #include <QPoint>
 #include <QContextMenuEvent>
-#include <QTextCodec>
+#include <QStringConverter>
 #include "hunspell/hunspell.hxx"
 
 class spellTextEditClass : public QTextEdit
@@ -37,7 +37,16 @@ private:
     QVector<QAction*> wordPropositionsActions;
     QString spellDic;
     Hunspell* spellChecker = nullptr;
-    QTextCodec* codecUsed = nullptr;
+    /* Remplacent le QTextCodec* que Qt 6 a supprimé, qui faisait les deux sens à lui seul. Il en
+     * faut deux ici : le code encode presque partout, du Qt vers ce qu'attend Hunspell, et ne décode
+     * qu'une fois, pour relire les suggestions rendues par getWordPropositions.
+     *
+     * Ils sont mutable parce que l'operator() de ces classes n'est pas const — elles gardent l'état
+     * des encodages qui en ont un — alors que checkWord et getWordPropositions le sont et n'ont
+     * aucune raison de cesser de l'être : encoder un mot pour le soumettre à Hunspell ne change rien
+     * à l'objet du point de vue de l'appelant. */
+    mutable QStringEncoder encoderUsed;
+    mutable QStringDecoder decoderUsed;
     QStringList addedWords;
     QPoint lastPos;
     bool spellCheckingIsEnabled = false;

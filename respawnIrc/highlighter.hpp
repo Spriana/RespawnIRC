@@ -3,8 +3,8 @@
 
 #include <QSyntaxHighlighter>
 #include <QString>
+#include <QStringConverter>
 #include <QTextCharFormat>
-#include <QTextCodec>
 #include <QTextDocument>
 #include "hunspell/hunspell.hxx"
 
@@ -29,7 +29,10 @@ private:
     Hunspell* spellChecker = nullptr;
     bool spellCheckingIsEnabled = false;
     QTextCharFormat spellCheckFormat;
-    QTextCodec* codec = nullptr;
+    /* Remplace le QTextCodec* que Qt 6 a supprimé. Le code n'encode que dans un sens, du Qt vers ce
+     * qu'attend Hunspell, un encodeur suffit donc. Par défaut il est invalide, ce qui tient
+     * exactement le rôle de l'ancien pointeur nul, et isValid() celui du test contre nullptr. */
+    QStringEncoder encoderUsed;
 };
 
 #endif
