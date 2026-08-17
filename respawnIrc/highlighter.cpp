@@ -7,18 +7,16 @@
 #include "highlighter.hpp"
 #include "styleTool.hpp"
 #include "pathTool.hpp"
+#include "configDependentVar.hpp"
 
 namespace
 {
-    /* UseUnicodePropertiesOption est indispensable et pas décorative : le \w de QRegExp reconnaissait
-     * les lettres Unicode, celui de PCRE se limite à l'ASCII tant qu'on ne la passe pas. Sans elle,
-     * et sur le dictionnaire français que le programme livre, « café » se découperait en « caf » et
-     * « é » — deux mots que Hunspell refuserait, donc tout le texte souligné en rouge. C'est la
-     * régression la plus probable de tout le portage, et elle est parfaitement silencieuse.
-     *
-     * Elle vaut aussi pour \b, que PCRE définit à partir de \w. */
-    const QRegularExpression expForWordSeparators(R"rgx([^\w'-]+)rgx",
-                                                  QRegularExpression::UseUnicodePropertiesOption);
+    /* Le motif et l'option viennent de configDependentVar, où les tests vont les chercher : l'option
+     * est ce qui empêche « café » de se découper en deux, et elle mérite d'être gardée par un test
+     * plutôt que par un commentaire. Le + est ajouté ici, cette version-ci mangeant les suites de
+     * séparateurs d'un coup pour découper une phrase entière. */
+    const QRegularExpression expForWordSeparators(configDependentVar::expForWordSeparatorPattern + "+",
+                                                  configDependentVar::expForWordSeparatorOptions);
 }
 
 highlighterClass::highlighterClass(QTextDocument* parent) : QSyntaxHighlighter(parent)
@@ -73,11 +71,12 @@ bool highlighterClass::setDic(const QString newSpellDic)
         {
             spellChecker->add_dic(fileInfoForUserDic.filePath().toLatin1());
         }
-        /* L'encodeur est invalide si le dictionnaire en annonce un que QStringConverter ne connaît
-         * pas, et c'est ce que testent les isValid() plus bas : Qt 6 ne sait faire que l'UTF-8,
-         * l'UTF-16, l'UTF-32, le latin-1 et celui du système, là où QTextCodec savait tout. Les
-         * dictionnaires livrés déclarent SET UTF-8, mais un dictionnaire déposé à la main dans
-         * resources/ en ISO-8859-15 tomberait ici — d'où des gardes plutôt qu'une confiance. */
+        /* L'encodeur est invalide si le dictionnaire annonce un encodage que Qt ne reconnaît pas, et
+         * c'est ce que testent les isValid() plus bas. La perte annoncée par MIGRATION-QT6.md n'a
+         * pas lieu : l'enum Encoding ne déclare qu'une poignée de valeurs, mais le constructeur par
+         * nom passe par ICU, que les binaires officiels de Qt embarquent, et accepte plus de deux
+         * cents encodages — ISO-8859-15 compris. Les gardes restent utiles pour un nom réellement
+         * inconnu, et tests/testQt6Behaviour.cpp garde ce constat. */
         encoderUsed = QStringEncoder(spellChecker->get_dic_encoding());
     }
 
@@ -142,7 +141,7 @@ void highlighterClass::spellCheck(const QString& text)
                          * d'autres. Sans escape, « c-- » ferait un motif invalide qui ne
                          * correspondrait à rien, silencieusement. */
                         const QRegularExpression expForThisWord(R"rgx(\b)rgx" + QRegularExpression::escape(thisString) + R"rgx(\b)rgx",
-                                                                QRegularExpression::UseUnicodePropertiesOption);
+                                                                configDependentVar::expForWordSeparatorOptions);
                         qsizetype wordCount = text.count(expForThisWord);
                         qsizetype index = -1;
 

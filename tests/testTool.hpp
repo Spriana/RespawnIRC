@@ -54,4 +54,8 @@ namespace testTool
 
 void runParsingTests();
 
+/* Les comportements que Qt 6 a changés en silence : frontière de mot Unicode du correcteur,
+ * aller-retour d'un config.ini, encodage du dictionnaire utilisateur. Voir testQt6Behaviour.cpp. */
+void runQt6BehaviourTests();
+
 #endif

@@ -11,14 +11,15 @@
 
 #include "spellTextEdit.hpp"
 #include "pathTool.hpp"
+#include "configDependentVar.hpp"
 
 namespace
 {
-    /* Même motif et même raison que dans highlighter.cpp : sans UseUnicodePropertiesOption le \w de
-     * PCRE est limité à l'ASCII, et la frontière de mot tomberait au milieu de « café ». Le clic
-     * droit sur un mot accentué n'en sélectionnerait qu'un morceau. */
-    const QRegularExpression expForWordSeparator(R"rgx([^\w'-])rgx",
-                                                 QRegularExpression::UseUnicodePropertiesOption);
+    /* Même motif et même option que dans highlighter.cpp, pris au même endroit — sans le +, on ne
+     * cherche ici qu'un seul séparateur de part et d'autre du curseur. Sans l'option, la frontière
+     * de mot tomberait au milieu de « café » et le clic droit n'en sélectionnerait qu'un morceau. */
+    const QRegularExpression expForWordSeparator(configDependentVar::expForWordSeparatorPattern,
+                                                 configDependentVar::expForWordSeparatorOptions);
 }
 
 spellTextEditClass::spellTextEditClass(QWidget* parent) : QTextEdit(parent)
@@ -116,8 +117,8 @@ bool spellTextEditClass::setDic(const QString newSpellDic)
             spellChecker->add_dic(fileInfoForUserDic.filePath().toLatin1());
         }
 
-        /* Tous deux invalides si le dictionnaire annonce un encodage que QStringConverter ne connaît
-         * pas — voir la même remarque dans highlighter.cpp. C'est ce que testent les isValid(). */
+        /* Tous deux invalides si le dictionnaire annonce un encodage que Qt ne reconnaît pas — voir
+         * la remarque détaillée dans highlighter.cpp. C'est ce que testent les isValid(). */
         encoderUsed = QStringEncoder(spellChecker->get_dic_encoding());
         decoderUsed = QStringDecoder(spellChecker->get_dic_encoding());
     }

@@ -130,6 +130,7 @@ int main(int argc, char* argv[])
 #endif
 
     runParsingTests();
+    runQt6BehaviourTests();
 
     int numberOfFailures = testTool::finish();
 
