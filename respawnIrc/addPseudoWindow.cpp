@@ -3,7 +3,7 @@
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QMessageBox>
-#include <QRegExp>
+#include <QRegularExpression>
 
 #include "addPseudoWindow.hpp"
 
@@ -40,7 +40,10 @@ bool addPseudoWindowClass::pseudoIsValide(QString pseudo)
         return false;
     }
 
-    if(pseudo.contains(QRegExp(R"rgx([^a-zA-Z0-9_\[\]-]+)rgx")) == true)
+    /* Cette classe de caractères est écrite en toutes lettres et ne contient ni \w ni \b : elle ne
+     * dépend donc pas de UseUnicodePropertiesOption, contrairement aux motifs du correcteur
+     * orthographique. Un pseudo JVC est de toute façon limité à ces caractères-là. */
+    if(pseudo.contains(QRegularExpression(R"rgx([^a-zA-Z0-9_\[\]-]+)rgx")) == true)
     {
         return false;
     }

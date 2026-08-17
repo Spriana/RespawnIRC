@@ -21,7 +21,10 @@ bool customWebViewClass::canGoForward()
 
 void customWebViewClass::contextMenuEvent(QContextMenuEvent* event)
 {
-    QMenu* menu = page()->createStandardContextMenu();
+    /* createStandardContextMenu est passée de QWebEnginePage à QWebEngineView sous Qt 6 : cette
+     * classe en hérite, l'appel se fait donc sur elle-même et non plus sur la page. Les
+     * page()->action() qui suivent, eux, sont toujours à leur place. */
+    QMenu* menu = createStandardContextMenu();
     const QList<QAction*> actions = menu->actions();
     for(QAction* thisAction : actions)
     {

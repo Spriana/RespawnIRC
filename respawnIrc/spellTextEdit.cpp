@@ -7,10 +7,19 @@
 #include <QTextBlock>
 #include <QIODevice>
 #include <QMenu>
-#include <QRegExp>
+#include <QRegularExpression>
 
 #include "spellTextEdit.hpp"
 #include "pathTool.hpp"
+
+namespace
+{
+    /* Même motif et même raison que dans highlighter.cpp : sans UseUnicodePropertiesOption le \w de
+     * PCRE est limité à l'ASCII, et la frontière de mot tomberait au milieu de « café ». Le clic
+     * droit sur un mot accentué n'en sélectionnerait qu'un morceau. */
+    const QRegularExpression expForWordSeparator(R"rgx([^\w'-])rgx",
+                                                 QRegularExpression::UseUnicodePropertiesOption);
+}
 
 spellTextEditClass::spellTextEditClass(QWidget* parent) : QTextEdit(parent)
 {
@@ -104,12 +113,12 @@ bool spellTextEditClass::setDic(const QString newSpellDic)
 
 void spellTextEditClass::searchWordBoundaryPosition(QString textBlock, int checkPos, int& beginPos, int& endPos) const
 {
-    endPos = textBlock.indexOf(QRegExp(R"rgx([^\w'-])rgx"), checkPos);
-    beginPos = textBlock.lastIndexOf(QRegExp(R"rgx([^\w'-])rgx"), checkPos);
+    endPos = static_cast<int>(textBlock.indexOf(expForWordSeparator, checkPos));
+    beginPos = static_cast<int>(textBlock.lastIndexOf(expForWordSeparator, checkPos));
 
     if(endPos == -1)
     {
-        endPos = textBlock.size();
+        endPos = static_cast<int>(textBlock.size());
     }
 
     if(beginPos + 1 >= textBlock.size())

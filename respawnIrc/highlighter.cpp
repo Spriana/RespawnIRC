@@ -2,11 +2,24 @@
 #include <QByteArray>
 #include <QColor>
 #include <QStringList>
-#include <QRegExp>
+#include <QRegularExpression>
 
 #include "highlighter.hpp"
 #include "styleTool.hpp"
 #include "pathTool.hpp"
+
+namespace
+{
+    /* UseUnicodePropertiesOption est indispensable et pas décorative : le \w de QRegExp reconnaissait
+     * les lettres Unicode, celui de PCRE se limite à l'ASCII tant qu'on ne la passe pas. Sans elle,
+     * et sur le dictionnaire français que le programme livre, « café » se découperait en « caf » et
+     * « é » — deux mots que Hunspell refuserait, donc tout le texte souligné en rouge. C'est la
+     * régression la plus probable de tout le portage, et elle est parfaitement silencieuse.
+     *
+     * Elle vaut aussi pour \b, que PCRE définit à partir de \w. */
+    const QRegularExpression expForWordSeparators(R"rgx([^\w'-]+)rgx",
+                                                  QRegularExpression::UseUnicodePropertiesOption);
+}
 
 highlighterClass::highlighterClass(QTextDocument* parent) : QSyntaxHighlighter(parent)
 {
@@ -102,7 +115,7 @@ void highlighterClass::spellCheck(const QString& text)
         QString simplifiedText = text.simplified();
         if(simplifiedText.isEmpty() == false)
         {
-            QStringList checkList = simplifiedText.split(QRegExp(R"rgx([^\w'-]+)rgx"));
+            QStringList checkList = simplifiedText.split(expForWordSeparators);
             for(QString thisString : checkList)
             {
                 while(thisString.startsWith('\'') == true || thisString.startsWith('-') == true)
@@ -118,15 +131,25 @@ void highlighterClass::spellCheck(const QString& text)
                 {
                     if(checkWord(thisString) == false)
                     {
-                        int wordCount;
-                        int index = -1;
-                        wordCount = text.count(QRegExp(R"rgx(\b)rgx" + thisString + R"rgx(\b)rgx"));
-                        for(int j = 0; j < wordCount; ++j)
+                        /* Le mot est échappé : il vient du texte tapé par l'utilisateur, et les
+                         * caractères que le correcteur laisse passer — l'apostrophe et le tiret —
+                         * n'ont rien de spécial, mais rien ne garantit qu'il n'y en ait jamais
+                         * d'autres. Sans escape, « c-- » ferait un motif invalide qui ne
+                         * correspondrait à rien, silencieusement. */
+                        const QRegularExpression expForThisWord(R"rgx(\b)rgx" + QRegularExpression::escape(thisString) + R"rgx(\b)rgx",
+                                                                QRegularExpression::UseUnicodePropertiesOption);
+                        qsizetype wordCount = text.count(expForThisWord);
+                        qsizetype index = -1;
+
+                        for(qsizetype j = 0; j < wordCount; ++j)
                         {
-                            index = text.indexOf(QRegExp(R"rgx(\b)rgx" + thisString + R"rgx(\b)rgx"), index + 1);
+                            index = text.indexOf(expForThisWord, index + 1);
                             if(index >= 0)
                             {
-                                setFormat(index, thisString.size(), spellCheckFormat);
+                                /* setFormat est restée en int sous Qt 6, d'où les casts : ils sont
+                                 * sans risque, un bloc de QTextDocument ne faisant pas deux
+                                 * milliards de caractères. */
+                                setFormat(static_cast<int>(index), static_cast<int>(thisString.size()), spellCheckFormat);
                             }
                         }
                     }
