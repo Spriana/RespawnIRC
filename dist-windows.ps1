@@ -108,26 +108,37 @@ Get-ChildItem (Join-Path $imageDir 'translations') -Filter 'qt_*.qm' -File |
 # Les outils de développement de Chromium ne sont jamais ouverts depuis le programme.
 Remove-Item (Join-Path $imageDir 'resources\qtwebengine_devtools_resources.pak') -Force -ErrorAction SilentlyContinue
 
-# D3Dcompiler_47.dll, que windeployqt copie avec le lot ANGLE, fait partie du système depuis
-# Windows 10 : le chargeur trouve celui de System32. Il n'était embarqué que pour Windows 7, où il
-# manque généralement. Ne pas lire cette ligne comme s'il restait un rendu de secours dans l'archive :
-# opengl32sw.dll est retiré juste en dessous, pour ses raisons propres, et plus rien ici ne rattrape un
-# ANGLE en panne. Ce qui rattrape l'absence de pilote OpenGL est WARP, déjà dans le système et une
-# couche plus bas — voir le commentaire suivant.
+# D3Dcompiler_47.dll fait partie du système depuis Windows 10 : le chargeur trouve celui de System32.
+# Il n'était embarqué que pour Windows 7, où il manque généralement. Le windeployqt de Qt 6 continue
+# de le copier — vérifié — bien que Qt 6 ait abandonné ANGLE, cette ligne reste donc utile.
 Remove-Item (Join-Path $imageDir 'D3Dcompiler_47.dll') -Force -ErrorAction SilentlyContinue
 
-# opengl32sw.dll (20 Mo, le plus gros fichier retirable de l'archive) est le rendu OpenGL logiciel de
-# Mesa. On a longtemps écrit ici qu'il était le seul recours des machines sans pilote OpenGL : c'est
-# faux. Sans pilote du vendeur, l'OpenGL de bureau se limite au « GDI Generic » 1.1 du système,
-# inutilisable pour Qt, mais le défaut de Qt bascule alors sur ANGLE, qui passe par Direct3D 11 et,
-# faute de GPU, par WARP, le rasteriseur logiciel livré avec Windows. Le repli logiciel est donc déjà
-# dans le système, une couche plus bas. Mesuré sur une machine virtuelle sans aucune accélération :
-# GL_RENDERER vaut « ANGLE (Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0) » et QtWebEngine
-# affiche correctement une page sans ce fichier. Les versions v3.1.6 à v3.1.10 publiées en amont ont
-# d'ailleurs été distribuées ainsi, avec QtWebEngine et sans lui, pendant un an et demi.
-# Il ne reste utile que si ANGLE lui-même échoue, ou si QT_OPENGL=software est forcé — ce dernier cas
-# ne peut venir que d'une variable d'environnement posée à la main, jamais du programme.
-Remove-Item (Join-Path $imageDir 'opengl32sw.dll') -Force -ErrorAction SilentlyContinue
+# Il n'y a plus de ligne pour opengl32sw.dll, et ce n'est pas un oubli : le windeployqt de Qt 6 ne le
+# copie plus du tout, vérifié sur cette version. Qt 6 a abandonné ANGLE, et avec lui le lot de fichiers
+# dont ce rendu logiciel de Mesa faisait partie. Sous Qt 5 il pesait 20 Mo et c'était le plus gros
+# fichier retirable de l'archive.
+#
+# Ce que la suppression de cette ligne ne dit pas, et qu'il faut garder en tête : le chemin de rendu
+# par défaut de Qt 6 sous Windows n'est plus celui de Qt 5. Le raisonnement qui justifiait le retrait
+# sous Qt 5 — sans pilote OpenGL, Qt bascule sur ANGLE, qui passe par Direct3D 11 puis par WARP, donc
+# le repli logiciel est déjà dans le système — portait sur ANGLE, qui n'existe plus ici. La conclusion
+# reste plausible, WARP étant toujours là et Qt 6 utilisant Direct3D directement, mais elle n'a pas
+# été revérifiée sur une machine sans accélération depuis le portage. Ne pas la présenter comme
+# constatée sous Qt 6.
+
+# FFmpeg — avcodec, avformat, avutil, swresample, swscale, 17,9 Mo à eux cinq — est laissé en place.
+#
+# MIGRATION-QT6.md prévoyait de le retirer, au motif que QSoundEffect ne passe par aucun moteur média,
+# les API de base de QtMultimedia étant intégrées à la bibliothèque principale. Le journal du
+# programme dit le contraire dès le démarrage : « qt.multimedia.ffmpeg: Using Qt multimedia with
+# FFmpeg version 7.1.5 ». Le moteur est donc bien chargé, que QSoundEffect s'en serve ou non.
+#
+# Trancher demanderait d'écouter les deux sons sans ces fichiers, et cette machine-ci ne peut pas le
+# faire : elle n'a aucun périphérique audio — QMediaDevices::audioOutputs() rend une liste vide, et
+# QSoundEffect s'en plaint au démarrage pour cette raison et non à cause du format des .wav, qui sont
+# du PCM mono 44,1 kHz 16 bits, exactement ce qu'il sait lire. Retirer 17,9 Mo sur la foi d'un
+# raisonnement déjà démenti une fois, sans pouvoir vérifier, c'est exactement ce que ce dépôt refuse
+# ailleurs. À reprendre sur une machine qui a une carte son.
 
 Write-Host "== Bibliothèques d'exécution (cible Windows 10)"
 # Il n'y a plus qu'une chose à embarquer depuis le passage à Qt 6 : OpenSSL a disparu de l'archive,
@@ -249,7 +260,7 @@ if(-not (Get-Command git -ErrorAction SilentlyContinue))
 $archiveOfData = Join-Path $distDir 'donnees.zip'
 
 Invoke-BuildTool -Name 'git archive' -Command {
-    & git -C $repoDir archive --format=zip --output=$archiveOfData HEAD resources themes
+    & git -C $repoDir archive --format=zip --output=$archiveOfData HEAD resources themes licenses LICENSE
 }
 
 # windeployqt a déjà créé un dossier resources/ à côté de l'exécutable pour QtWebEngine (icudtl.dat
@@ -259,6 +270,14 @@ Invoke-BuildTool -Name 'git archive' -Command {
 # ce que fait Expand-Archive en écrivant dans un dossier déjà peuplé.
 Expand-Archive -Path $archiveOfData -DestinationPath $imageDir -Force
 Remove-Item $archiveOfData -Force
+
+# Le LICENSE de la racine rejoint les autres textes dans licenses\, sous un nom qui dit lequel c'est :
+# à côté de la LGPL de Qt, un fichier nommé « LICENSE » tout court prêterait à confusion.
+#
+# Rien de distribué ne contenait le moindre texte de licence jusqu'ici, ni la LGPLv3 de Qt — qui est
+# une obligation, pas un arbitrage — ni celle du programme lui-même. C'était le seul manquement du
+# dossier « distribution », le reste n'étant que des choix.
+Move-Item (Join-Path $imageDir 'LICENSE') (Join-Path $imageDir 'licenses\LICENSE-RespawnIRC.txt') -Force
 
 $zipPath = Join-Path $distDir "RespawnIRC-$version-windows.zip"
 
