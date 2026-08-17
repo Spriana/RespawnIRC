@@ -4,7 +4,7 @@
 # jamais écrits : sous Windows tout ce que le programme écrit va dans userdata/, à côté de
 # l'exécutable, ce qui garde l'ensemble portable.
 #
-# Usage : .\dist-windows.ps1 [-QtDir chemin\vers\Qt\5.15.2\msvc2019_64] [-Clean] [-SkipTests]
+# Usage : .\dist-windows.ps1 [-QtDir chemin\vers\Qt\6.11.2\msvc2022_64] [-Clean] [-SkipTests]
 #         [-HunspellLibName hunspell-1.7] [-ZlibLibName zlibstatic]
 # À défaut, le Qt utilisé est celui dont le qmake est dans le PATH.
 #
@@ -19,9 +19,9 @@
 # lancer depuis une invite de commandes développeur.
 #
 # La cible est Windows 10 64 bits ou plus récent. Le système fournit l'Universal CRT et
-# D3Dcompiler_47.dll, il n'y a donc que deux choses à embarquer : OpenSSL, sans quoi aucune page
-# n'est joignable, et les bibliothèques C++ de MSVC, sans lesquelles le programme ne démarre pas sur
-# une machine où le redistribuable n'a jamais été installé (voir le README pour le détail).
+# D3Dcompiler_47.dll, et Qt 6 se passe d'OpenSSL en se rabattant sur Schannel : il ne reste donc
+# qu'une chose à embarquer, les bibliothèques C++ de MSVC, sans lesquelles le programme ne démarre
+# pas sur une machine où le redistribuable n'a jamais été installé (voir le README pour le détail).
 
 [CmdletBinding()]
 param(
@@ -130,14 +130,10 @@ Remove-Item (Join-Path $imageDir 'D3Dcompiler_47.dll') -Force -ErrorAction Silen
 Remove-Item (Join-Path $imageDir 'opengl32sw.dll') -Force -ErrorAction SilentlyContinue
 
 Write-Host "== Bibliothèques d'exécution (cible Windows 10)"
-# 1. OpenSSL, que Qt charge à l'exécution et sans lequel aucune page n'est joignable. Le détail est
-#    dans windows-common.ps1, avec la vérification elle-même : ici son absence est une erreur franche,
-#    une archive sans OpenSSL n'ayant aucun intérêt.
-$opensslDir = Get-OpenSslDir -RepoDir $repoDir -Required
-
-Copy-Item (Join-Path $opensslDir '*.dll') $imageDir -Force
-
-# 2. Bibliothèques C++ de MSVC : absentes d'une machine où le redistribuable n'a jamais été
+# Il n'y a plus qu'une chose à embarquer depuis le passage à Qt 6 : OpenSSL a disparu de l'archive,
+# Qt 6 se rabattant sur Schannel, le TLS natif de Windows. Voir windows-common.ps1.
+#
+# Bibliothèques C++ de MSVC : absentes d'une machine où le redistribuable n'a jamais été
 #    installé, quel que soit le Windows. C'est ce qui les distingue de l'Universal CRT abandonné
 #    plus bas : sur un Windows 10 vierge, ucrtbase.dll est bien dans System32 alors que
 #    msvcp140.dll et vcruntime140.dll n'y sont pas. Passer à Windows 10 ne les rend pas inutiles.
@@ -176,9 +172,8 @@ Write-Host "== Vérification des dépendances"
 #
 # Portée volontairement étroite : les imports statiques de la famille du runtime MSVC, les seuls que
 # ni Windows ni windeployqt ne fournissent. Le reste des imports est soit dans l'archive, soit fourni
-# par le système ; OpenSSL n'apparaît pas ici puisque Qt le charge dynamiquement, et il a déjà sa
-# propre vérification plus haut. Un import chargé à la main par LoadLibrary échapperait aussi à ce
-# contrôle : il ne remplace pas un essai sur une machine sans redistribuable Visual C++.
+# par le système. Un import chargé à la main par LoadLibrary échapperait à ce contrôle : il ne
+# remplace pas un essai sur une machine sans redistribuable Visual C++.
 if(-not (Get-Command dumpbin -ErrorAction SilentlyContinue))
 {
     throw "dumpbin est introuvable alors que l'environnement MSVC est chargé : la vérification des dépendances ne peut pas se faire, et la sauter rendrait le contrôle inutile."

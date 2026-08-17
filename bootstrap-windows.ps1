@@ -1,6 +1,12 @@
 ﻿# Installe de quoi compiler RespawnIRC sous Windows sur une machine vierge : les Build Tools de
-# Visual Studio, Qt 5.15.2 avec QtWebEngine, Hunspell et zlib compilés à la main, et OpenSSL 1.1.1.
-# Tout est posé dans la disposition attendue par les .pro, il n'y a rien à déplacer ensuite.
+# Visual Studio, Qt 6.11.2 avec QtWebEngine, et Hunspell et zlib compilés à la main. Tout est posé
+# dans la disposition attendue par les .pro, il n'y a rien à déplacer ensuite.
+#
+# Il n'y a plus d'étape OpenSSL depuis le passage à Qt 6 : Qt 5.15.2 chargeait libssl-1_1 et
+# libcrypto-1_1 à l'exécution et ne savait pas parler à OpenSSL 3, ce qui obligeait à livrer une
+# 1.1.1 non maintenue depuis septembre 2023. Qt 6 a des greffons de chiffrement interchangeables et
+# se rabat sur Schannel, le TLS natif de Windows, quand OpenSSL est absent : la dépendance disparaît
+# entièrement, du bootstrap comme de l'archive.
 #
 # Usage, depuis un PowerShell ordinaire, à la racine du dépôt :
 #     powershell -ExecutionPolicy Bypass -File .\bootstrap-windows.ps1
@@ -25,9 +31,11 @@
 # Le script est réentrant : chaque étape est sautée si son résultat est déjà là, on peut donc le
 # relancer après un échec sans tout retélécharger.
 #
-# Compter une trentaine de minutes et environ 4,5 Go sur le disque, presque entièrement pour les
-# Build Tools (3,3 Go) et Qt (0,9 Go mesuré, QtWebEngine compris), le reste étant négligeable :
-# Hunspell et zlib pèsent 2,4 Mo de téléchargement et se compilent en une quinzaine de secondes.
+# Compter une trentaine de minutes et environ 7 Go sur le disque, pour les Build Tools (3,3 Go) et Qt
+# (3,8 Go mesuré une fois installé, QtWebEngine compris — Qt 6 est nettement plus gros que la 5.15.2,
+# dont les mêmes modules tenaient en 0,9 Go). Le téléchargement, lui, ne pèse que 0,5 Go pour Qt : ses
+# archives sont des .7z en LZMA, qui compressent d'un facteur sept. Hunspell et zlib sont négligeables,
+# 2,4 Mo de téléchargement et une quinzaine de secondes de compilation.
 #
 # Le script s'arrête à l'installation : il affiche pour finir les commandes de build-windows.ps1, de
 # run-windows.ps1 et de dist-windows.ps1, qui sont la suite de la chaîne.
@@ -38,17 +46,27 @@
 [CmdletBinding()]
 param(
     [string]$QtRootDir = 'C:\Qt',
-    [string]$QtVersion = '5.15.2',
-    [string]$QtArch = 'win64_msvc2019_64',
+    # Le jour du gel sur la dernière 6.12.x librement publiée, c'est ce numéro-ci qu'il faudra fixer :
+    # un gel qui ne s'écrit nulle part n'est pas un gel. Voir MIGRATION-QT6.md.
+    [string]$QtVersion = '6.11.2',
+    [string]$QtArch = 'msvc2022_64',
+    # Les modules à demander en plus du paquet de base. Sous Qt 6, qtdeclarative fait partie du paquet
+    # de base et n'a donc pas à y figurer, contrairement à ce qu'on croirait en recopiant la commande
+    # de Qt 5 ; qtwebchannel et qtpositioning, eux, sont sortis de QtWebEngine et sont bien à demander.
+    # QtWebEngine lui-même n'est pas dans cette liste : il a quitté les modules pour les « Extensions »
+    # depuis Qt 6.8 et vit dans un arbre à lui, traité à part plus bas.
+    [string[]]$QtModules = @('qtmultimedia', 'qtpositioning', 'qtwebchannel'),
     # Le numéro du SDK est à adapter, c'est celui qui était courant quand ces lignes ont été écrites.
     [string]$WindowsSdkComponent = 'Microsoft.VisualStudio.Component.Windows11SDK.26100',
-    [string]$AqtVersion = 'v3.3.0',
     [string]$HunspellVersion = '1.7.3',
     [string]$ZlibVersion = '1.3.1',
-    [string]$OpenSslVersion = '1.1.1w',
-    # Empreinte publiée par FireDaemon. La 1.1.1w étant la dernière version de la branche 1.1.1, ce
-    # fichier ne bouge plus ; si la vérification échoue, ne pas la contourner sans comprendre.
-    [string]$OpenSslSha256 = '1870B15BF6749E65FFBBADF52CDFF3EE0E9F02943550BF4395574BB432AF3EB8',
+    # 7za sert à extraire les archives de Qt, qui sont des .7z en LZMA : le tar de Windows est un
+    # bsdtar 3.3.2 sans ce codec, et répond « LZMA codec is unsupported ». On le prend chez NuGet,
+    # dont les paquets sont immuables une fois publiés, donc l'empreinte ci-dessous vaut pour
+    # toujours — le 7zr.exe de 7-zip.org, lui, est derrière une URL non versionnée dont le contenu
+    # change à chaque version, et l'empreinte serait à refaire à chacune.
+    [string]$SevenZipVersion = '18.1.0',
+    [string]$SevenZipSha256 = '39FD1B1D7B8D44D7C48FEE9D9405F4324D33011E51BFE0742D8ADA1259990197',
     [switch]$SkipBuildTools,
     [switch]$SkipQt,
     [switch]$KeepDownloads,
@@ -61,7 +79,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 $repoDir = $PSScriptRoot
 $downloadDir = Join-Path $repoDir 'build\bootstrap'
-$qtDir = Join-Path $QtRootDir "$QtVersion\msvc2019_64"
+$qtDir = Join-Path $QtRootDir "$QtVersion\$QtArch"
 
 # Les mêmes que dans windows-common.ps1, recopiées pour que ce script reste autonome : il tourne avant
 # que quoi que ce soit d'autre n'existe sur la machine. C'est le seul des quatre scripts Windows à
@@ -147,12 +165,120 @@ function Get-FileIfNeeded
     Invoke-WebRequest $Url -OutFile $Path -TimeoutSec 1800
 }
 
+# Qt s'installe en lisant son dépôt en ligne directement, et non par aqtinstall.
+#
+# Ce n'est pas un choix d'élégance, c'est que rien d'autre ne marche : Qt a changé la disposition de
+# son dépôt à partir de la 6.11, l'Updates.xml passant de qt6_<v>/qt6_<v>/ à qt6_<v>/qt6_<v>_<arch>/,
+# et aqtinstall demande donc un qt6_6112/qt6_6112/Updates.xml qui n'existe pas — l'échec arrive en
+# « Failed to locate XML data for Qt version '6.11.2' ». Le correctif est fusionné dans son master
+# depuis le 24 mars 2026 (PR #1000, sur l'issue #959), mais aucune version n'a été publiée depuis la
+# v3.3.0 de juin 2025, ni sur GitHub ni sur PyPI : il n'existe aujourd'hui aucun aqt téléchargeable
+# capable d'installer la version qu'on vise, et l'ancien binaire épinglé ici ne le pouvait pas.
+#
+# Ce que faisait aqt tient de toute façon en peu de chose, et le faire soi-même retire du chemin un
+# outil tiers qui vient de casser une fois — ce qui compte pour un projet dont MIGRATION-QT6.md
+# prévoit de rester sur 6.12 jusqu'en 2031 : la chaîne ne dépend plus que du dépôt de Qt lui-même.
+# Un Updates.xml est une liste de paquets portant chacun sa version et ses archives, et l'URL d'une
+# archive est simplement <base>/<Name>/<Version><Archive>.
+function Get-SevenZipBin
+{
+    $sevenZipBin = Join-Path $downloadDir '7zip\tools\x64\7za.exe'
+
+    if(Test-Path $sevenZipBin)
+    {
+        return $sevenZipBin
+    }
+
+    # Expand-Archive refuse tout ce qui ne finit pas par .zip, alors qu'un .nupkg en est un.
+    $packagePath = Join-Path $downloadDir "7zip-$SevenZipVersion.zip"
+    Get-FileIfNeeded -Url "https://www.nuget.org/api/v2/package/7-Zip.CommandLine/$SevenZipVersion" -Path $packagePath
+
+    $hash = (Get-FileHash $packagePath -Algorithm SHA256).Hash
+
+    if($hash -ne $SevenZipSha256)
+    {
+        throw "L'empreinte SHA-256 de 7-Zip ne correspond pas : $hash au lieu de $SevenZipSha256. Fichier corrompu ou modifié, ne pas l'utiliser."
+    }
+
+    Expand-Archive $packagePath -DestinationPath (Join-Path $downloadDir '7zip') -Force
+
+    if(-not (Test-Path $sevenZipBin))
+    {
+        throw "7za.exe est introuvable après extraction : la disposition du paquet NuGet a dû changer."
+    }
+
+    return $sevenZipBin
+}
+
+# Les paquets d'un dépôt, réduits à ceux qui ont quelque chose à télécharger.
+function Get-PackagesOfQtRepository
+{
+    param([Parameter(Mandatory)][string]$BaseUrl, [Parameter(Mandatory)][string]$NameOfCache)
+
+    $xmlPath = Join-Path $downloadDir "Updates-$NameOfCache.xml"
+    Get-FileIfNeeded -Url "$BaseUrl/Updates.xml" -Path $xmlPath
+
+    [xml]$document = Get-Content $xmlPath
+
+    return $document.Updates.PackageUpdate | Where-Object { $_.DownloadableArchives }
+}
+
+# Toutes les archives d'un paquet, extraites au même endroit : elles portent des chemins relatifs au
+# préfixe de l'architecture (bin\, include\, mkspecs\...) et se complètent donc les unes les autres.
+function Install-QtPackage
+{
+    param(
+        [Parameter(Mandatory)][string]$BaseUrl,
+        [Parameter(Mandatory)]$Package,
+        [Parameter(Mandatory)][string]$SevenZipBin
+    )
+
+    foreach($thisArchive in ($Package.DownloadableArchives -split ','))
+    {
+        $archiveName = $thisArchive.Trim()
+
+        if(-not $archiveName)
+        {
+            continue
+        }
+
+        $archivePath = Join-Path $downloadDir $archiveName
+        Get-FileIfNeeded -Url "$BaseUrl/$($Package.Name)/$($Package.Version)$archiveName" -Path $archivePath
+
+        Invoke-BuildTool -Name "7za ($archiveName)" -Command {
+            & $SevenZipBin x $archivePath "-o$qtDir" -y -bso0 -bsp0
+        }
+    }
+}
+
+# Le paquet nommé, ou un échec qui dit lequel manque : une archive absente donnerait sinon un Qt
+# incomplet dont le défaut n'apparaîtrait qu'à la compilation, voire à l'exécution.
+function Install-QtPackageNamed
+{
+    param(
+        [Parameter(Mandatory)][string]$BaseUrl,
+        [Parameter(Mandatory)]$Packages,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$SevenZipBin
+    )
+
+    $package = $Packages | Where-Object { $_.Name -eq $Name }
+
+    if(-not $package)
+    {
+        throw "Paquet introuvable dans le dépôt de Qt : $Name. Vérifier -QtVersion, -QtArch et -QtModules."
+    }
+
+    Write-Host "   $Name"
+    Install-QtPackage -BaseUrl $BaseUrl -Package $package -SevenZipBin $SevenZipBin
+}
+
 New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
 
 # 1. Les Build Tools. Les deux composants sont nécessaires : VC.Tools.x86.x64 seul pose bien cl.exe
 #    mais aucun Windows Kits, et depuis Visual Studio 2015 les en-têtes de la bibliothèque C standard
 #    appartiennent au SDK et pas au compilateur — un #include <stdio.h> suffit à s'en rendre compte.
-Write-Host "== 1/5 Build Tools de Visual Studio"
+Write-Host "== 1/4 Build Tools de Visual Studio"
 
 if($SkipBuildTools)
 {
@@ -253,11 +379,14 @@ else
     }
 }
 
-# 2. Qt. La 5.15.2 est la dernière version dont les binaires sont librement téléchargeables, et
-#    aqtinstall les récupère sans demander de compte Qt. qtmultimedia fait partie de l'installation
-#    de base, seul qtwebengine doit être demandé en plus — et c'est lui qui impose MSVC, Chromium ne
-#    se compilant pas avec MinGW.
-Write-Host "== 2/5 Qt $QtVersion avec QtWebEngine"
+# 2. Qt, téléchargé depuis son dépôt en ligne sans compte Qt ni installateur officiel. Les binaires
+#    de toutes les versions de Qt 6 y sont encore, de la 6.0.0 de décembre 2020 à aujourd'hui, y
+#    compris les dernières livraisons libres des LTS 6.2, 6.5 et 6.8 dont les correctifs suivants
+#    sont passés en commercial : c'est ce qui rend tenable le gel prévu sur 6.12. Voir
+#    MIGRATION-QT6.md, et la remarque au-dessus de Get-SevenZipBin sur l'abandon d'aqtinstall.
+#
+#    C'est QtWebEngine qui impose MSVC, Chromium ne se compilant pas avec MinGW.
+Write-Host "== 2/4 Qt $QtVersion avec QtWebEngine"
 
 if($SkipQt)
 {
@@ -269,26 +398,34 @@ elseif(Test-Path (Join-Path $qtDir 'bin\qmake.exe'))
 }
 else
 {
-    $aqtBin = Join-Path $downloadDir 'aqt.exe'
-    Get-FileIfNeeded -Url "https://github.com/miurahr/aqtinstall/releases/download/$AqtVersion/aqt_x64.exe" -Path $aqtBin
+    Write-Host "   installation dans $qtDir (0,5 Go à télécharger, 3,8 Go une fois extrait)..."
 
-    Write-Host "   installation dans $QtRootDir (0,9 Go)..."
+    $sevenZipBin = Get-SevenZipBin
 
-    # aqt écrit un aqtinstall.log dans le dossier courant : on se place dans build\bootstrap pour
-    # qu'il y atterrisse avec le reste des téléchargements, et non à la racine du dépôt où il
-    # apparaîtrait dans git status.
-    Push-Location $downloadDir
+    # Le numéro perd ses points dans les noms du dépôt : 6.11.2 y est 6112.
+    $versionTag = $QtVersion -replace '\.', ''
+    $repoBaseUrl = 'https://download.qt.io/online/qtsdkrepository/windows_x86'
 
-    try
+    # Le bureau : le paquet de base, puis les modules demandés.
+    $desktopUrl = "$repoBaseUrl/desktop/qt6_$versionTag/qt6_${versionTag}_$QtArch"
+    $desktopPackages = Get-PackagesOfQtRepository -BaseUrl $desktopUrl -NameOfCache "desktop-$versionTag"
+
+    Install-QtPackageNamed -BaseUrl $desktopUrl -Packages $desktopPackages -SevenZipBin $sevenZipBin `
+        -Name "qt.qt6.$versionTag.win64_$QtArch"
+
+    foreach($thisModule in $QtModules)
     {
-        Invoke-BuildTool -Name 'aqt' -Command {
-            & $aqtBin install-qt windows desktop $QtVersion $QtArch -m qtwebengine --outputdir $QtRootDir
-        }
+        Install-QtPackageNamed -BaseUrl $desktopUrl -Packages $desktopPackages -SevenZipBin $sevenZipBin `
+            -Name "qt.qt6.$versionTag.addons.$thisModule.win64_$QtArch"
     }
-    finally
-    {
-        Pop-Location
-    }
+
+    # QtWebEngine, dans l'arbre des extensions depuis Qt 6.8, avec une disposition à lui : le numéro
+    # sans points et l'architecture sans le win64_ y sont deux niveaux de dossiers.
+    $webEngineUrl = "$repoBaseUrl/extensions/qtwebengine/$versionTag/$QtArch"
+    $webEnginePackages = Get-PackagesOfQtRepository -BaseUrl $webEngineUrl -NameOfCache "webengine-$versionTag"
+
+    Install-QtPackageNamed -BaseUrl $webEngineUrl -Packages $webEnginePackages -SevenZipBin $sevenZipBin `
+        -Name "extensions.qtwebengine.$versionTag.win64_$QtArch"
 
     if(-not (Test-Path (Join-Path $qtDir 'bin\qmake.exe')))
     {
@@ -305,7 +442,7 @@ Import-MsvcEnvironment
 #    l'édition de liens échouerait. On compile deux fois, release et debug : une bibliothèque release
 #    seule suffisait à `nmake release`, mais faisait échouer `nmake debug` en LNK2038 sur
 #    `RuntimeLibrary` et `_ITERATOR_DEBUG_LEVEL`, /MD et /MDd ne se mélangeant pas dans un même binaire.
-Write-Host "== 3/5 Hunspell $HunspellVersion"
+Write-Host "== 3/4 Hunspell $HunspellVersion"
 
 $hunspellLib = Join-Path $repoDir 'hunspell\lib\hunspell.lib'
 $hunspellLibDebug = Join-Path $repoDir 'hunspell\lib\hunspelld.lib'
@@ -363,7 +500,7 @@ else
 # deux CRT dans le même binaire. C'est précisément le genre de mélange — allouer dans l'une, libérer
 # dans l'autre — que la section « Corruption de tas sous Windows » de CLAUDE.md apprend à traquer : le
 # laisser dans le binaire de débogage reviendrait à y introduire le défaut qu'on l'utilise à chercher.
-Write-Host "== 4/5 zlib $ZlibVersion"
+Write-Host "== 4/4 zlib $ZlibVersion"
 
 $zlibLib = Join-Path $repoDir 'zlib\lib\zlib.lib'
 $zlibLibDebug = Join-Path $repoDir 'zlib\lib\zlibd.lib'
@@ -408,47 +545,6 @@ else
     Copy-Item (Join-Path $sourceDir 'zlib.lib'), (Join-Path $sourceDir 'zlibd.lib') (Join-Path $repoDir 'zlib\lib') -Force
 }
 
-# 5. OpenSSL. Sans lui le programme démarre mais ne peut joindre aucune page : Qt 5.15.2 charge
-#    libssl-1_1-x64.dll et libcrypto-1_1-x64.dll à l'exécution, et en leur absence
-#    QSslSocket::supportsSsl() est faux et tout échoue silencieusement. windeployqt ne les copie pas,
-#    et Qt ne distribue plus que du OpenSSL 3, dont l'interface binaire est incompatible.
-#    La 1.1.1 n'est plus maintenue depuis septembre 2023 : c'est un choix assumé faute d'alternative
-#    simple, Qt 5.15.2 ne sachant pas parler à OpenSSL 3.
-Write-Host "== 5/5 OpenSSL $OpenSslVersion"
-
-$opensslDll = Join-Path $repoDir 'openssl\bin\libssl-1_1-x64.dll'
-
-if(Test-Path $opensslDll)
-{
-    Write-Host "   déjà installé"
-}
-else
-{
-    $archivePath = Join-Path $downloadDir "openssl-$OpenSslVersion.zip"
-    Get-FileIfNeeded -Url "https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-$OpenSslVersion.zip" -Path $archivePath
-
-    $hash = (Get-FileHash $archivePath -Algorithm SHA256).Hash
-
-    if($hash -ne $OpenSslSha256)
-    {
-        throw "L'empreinte SHA-256 d'OpenSSL ne correspond pas : $hash au lieu de $OpenSslSha256. Fichier corrompu ou modifié, ne pas l'utiliser."
-    }
-
-    Write-Host "   empreinte SHA-256 vérifiée"
-    $extractDir = Join-Path $downloadDir 'openssl'
-    Expand-Archive $archivePath -DestinationPath $extractDir -Force
-
-    New-Item -ItemType Directory -Force -Path (Join-Path $repoDir 'openssl\bin') | Out-Null
-    Get-ChildItem $extractDir -Recurse -Filter '*-x64.dll' |
-        Where-Object { $_.FullName -match '\\x64\\bin\\' } |
-        Copy-Item -Destination (Join-Path $repoDir 'openssl\bin') -Force
-
-    if(-not (Test-Path $opensslDll))
-    {
-        throw "libssl-1_1-x64.dll est introuvable après extraction : la disposition de l'archive FireDaemon a dû changer."
-    }
-}
-
 if($KeepDownloads -eq $false)
 {
     Remove-Item $downloadDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -464,8 +560,6 @@ $checks = [ordered]@{
     'hunspelld.lib'  = $hunspellLibDebug
     'zlib.lib'       = $zlibLib
     'zlibd.lib'      = $zlibLibDebug
-    'libssl-1_1'     = $opensslDll
-    'libcrypto-1_1'  = Join-Path $repoDir 'openssl\bin\libcrypto-1_1-x64.dll'
 }
 
 $missing = 0

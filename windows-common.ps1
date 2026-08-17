@@ -1,9 +1,7 @@
 ﻿# Ce que build-windows.ps1, dist-windows.ps1 et run-windows.ps1 ont en commun : retrouver
-# l'installation de Qt, savoir si OpenSSL est là, charger l'environnement de MSVC et appeler un outil
-# de compilation. Les deux premiers blocs étaient recopiés mot pour mot dans les scripts de
-# distribution et de lancement, à la seule différence du throw contre le Write-Warning, d'où le
-# -Required ci-dessous ; les deux autres attendaient ici le troisième utilisateur que le script de
-# compilation vient d'apporter.
+# l'installation de Qt, charger l'environnement de MSVC et appeler un outil de compilation. Le
+# premier bloc était recopié mot pour mot dans les scripts de distribution et de lancement ; les
+# deux autres attendaient ici le troisième utilisateur que le script de compilation vient d'apporter.
 #
 # Se charge par point-sourcing, pour que les fonctions atterrissent dans la portée de l'appelant :
 #     . (Join-Path $PSScriptRoot 'windows-common.ps1')
@@ -72,9 +70,20 @@ function Get-QtSuitability
 # qu'unix-common.sh regarde sous macOS, et pour la même raison : le défaut des scripts doit tomber sur
 # le Qt que le README fait installer.
 #
-# L'ordre des versions est celui du tri, donc 5.15.2 avant un 6.x, ce qui est le bon défaut pour ce
-# dépôt. msvc*_64 exclut au passage les Qt 32 bits et ceux pour MinGW, mais ce n'est pas là-dessus
-# qu'on compte : c'est Get-QtSuitability qui écarte un Qt sans QtWebEngine, y compris celui du PATH.
+# Les versions sont triées en décroissant, et comme des numéros de version et non comme du texte :
+# la plus récente d'abord, donc un 6.12 avant un 6.11 et avant une 5.15.2 restée là.
+#
+# Les deux moitiés de cette phrase étaient fausses et se rattrapaient par accident. Le tri était un
+# Sort-Object FullName, donc lexicographique et croissant : il rendait 5.15.2 en premier, ce qui
+# était le bon défaut tant que le dépôt visait Qt 5 — le commentaire d'alors le disait ainsi — mais
+# s'inverse le jour du portage, et aurait fait compiler contre le Qt 5 laissé sur la machine sans
+# que rien ne le signale. Un tri lexicographique se trompe en plus entre versions de Qt 6, où il
+# classe 6.9.0 après 6.12.0, le texte « 9 » venant après « 1 ». D'où le [version] ci-dessous, qui
+# compare les nombres composante par composante ; ce qui ne s'y analyse pas passe en dernier plutôt
+# que de faire échouer la recherche.
+#
+# msvc*_64 exclut au passage les Qt 32 bits et ceux pour MinGW, mais ce n'est pas là-dessus qu'on
+# compte : c'est Get-QtSuitability qui écarte un Qt sans QtWebEngine, y compris celui du PATH.
 function Get-CandidateQtDirs
 {
     $candidates = @()
@@ -84,7 +93,23 @@ function Get-CandidateQtDirs
         $candidates += Split-Path (Split-Path (Get-Command qmake).Source)
     }
 
-    foreach($thisDir in @(Get-Item (Join-Path $qtRootDirForSearch '*\msvc*_64') -ErrorAction SilentlyContinue | Sort-Object FullName))
+    $sortByVersion = @{
+        Expression = {
+            $parsedVersion = $null
+
+            if([version]::TryParse($_.Parent.Name, [ref]$parsedVersion))
+            {
+                $parsedVersion
+            }
+            else
+            {
+                [version]'0.0'
+            }
+        }
+        Descending = $true
+    }
+
+    foreach($thisDir in @(Get-Item (Join-Path $qtRootDirForSearch '*\msvc*_64') -ErrorAction SilentlyContinue | Sort-Object $sortByVersion))
     {
         if(Test-Path (Join-Path $thisDir.FullName 'bin\qmake.exe'))
         {
@@ -110,7 +135,7 @@ function Get-QtWithoutWebEngineMessage
         $message = "Aucun Qt avec QtWebEngine trouvé, et RespawnIRC en a besoin."
     }
 
-    return "$message QtWebEngine n'existe pas pour MinGW, Chromium ne se compilant qu'avec MSVC : il faut le Qt 5.15.2 msvc2019_64, que bootstrap-windows.ps1 installe dans $qtRootDirForSearch (voir le README). Une fois là, les scripts le trouvent seuls ; sinon, désignez-le avec -QtDir."
+    return "$message QtWebEngine n'existe pas pour MinGW, Chromium ne se compilant qu'avec MSVC : il faut un Qt 6 msvc2022_64, que bootstrap-windows.ps1 installe dans $qtRootDirForSearch (voir le README). Une fois là, les scripts le trouvent seuls ; sinon, désignez-le avec -QtDir."
 }
 
 # Le dossier de Qt donné en argument, ou le premier candidat qui convienne : c'est celui qui contient
@@ -181,29 +206,13 @@ function Resolve-QtDir
     throw (Get-QtWithoutWebEngineMessage -QtDir '')
 }
 
-# Le dossier où le dépôt attend OpenSSL. Qt 5.15.2 charge libssl-1_1-x64.dll et libcrypto-1_1-x64.dll
-# à l'exécution pour tout ce qui est HTTPS : en leur absence QSslSocket::supportsSsl() est faux et
-# aucune page de jeuxvideo.com n'est joignable, sans message clair. windeployqt ne les copie pas et Qt
-# ne les distribue plus (voir le README). Avec -Required, leur absence est une erreur — une archive
-# sans elles ne servirait à rien ; sans, un simple avertissement, le programme démarrant quand même.
-function Get-OpenSslDir
-{
-    param([Parameter(Mandatory)][string]$RepoDir, [switch]$Required)
-
-    $opensslDir = Join-Path $RepoDir 'openssl\bin'
-
-    if(-not (Test-Path (Join-Path $opensslDir 'libssl-1_1-x64.dll')))
-    {
-        if($Required)
-        {
-            throw "OpenSSL introuvable dans openssl\bin : sans lui le programme ne peut joindre aucune page (voir le README)."
-        }
-
-        Write-Warning "OpenSSL absent d'openssl\bin : le programme démarrera mais ne pourra joindre aucune page."
-    }
-
-    return $opensslDir
-}
+# Il n'y a plus de Get-OpenSslDir ici, et rien ne l'a remplacée : Qt 6 a des greffons de chiffrement
+# interchangeables et se rabat sur Schannel, le TLS natif de Windows, quand OpenSSL est absent. Qt
+# 5.15.2 chargeait libssl-1_1-x64.dll et libcrypto-1_1-x64.dll à l'exécution pour tout ce qui est
+# HTTPS, et en leur absence QSslSocket::supportsSsl() était faux et aucune page de jeuxvideo.com
+# n'était joignable, sans message clair — d'où la vérification que cette fonction faisait. Le dossier
+# openssl\ du dépôt, les deux DLL de l'archive et l'étape 5 de bootstrap-windows.ps1 sont partis
+# ensemble.
 
 # Charge les variables d'environnement de MSVC (cl, nmake, rc, dumpbin) dans la session courante :
 # vcvars64.bat les pose dans son propre processus, on les récupère en lisant son `set` final. C'est ce
