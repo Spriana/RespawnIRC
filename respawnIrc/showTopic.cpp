@@ -41,7 +41,7 @@ showTopicClass::showTopicClass(const QList<QString>* newListOfIgnoredPseudo, con
 
     QVBoxLayout* layout = new QVBoxLayout;
     layout->addWidget(messagesBox);
-    layout->setMargin(0);
+    layout->setContentsMargins(0, 0, 0, 0);
 
     setLayout(layout);
 

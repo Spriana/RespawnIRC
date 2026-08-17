@@ -16,8 +16,6 @@ TEMPLATE = app
 # que la compilation ait lieu dans les sources ou dans build/.
 DESTDIR = $$PWD/../build
 
-DEFINES += QT_DEPRECATED_WARNINGS
-
 # Le numéro de version vient de version.pri, qui en est la seule source, et arrive dans le programme
 # par ce DEFINES : respawnIrc.cpp le préfixe d'un v pour en faire currentVersionName.
 include(../version.pri)
@@ -137,7 +135,9 @@ macx {
     }
 }
 
-CONFIG += c++14
+# C++17 est le minimum exigé par Qt 6, et c'est aussi le défaut de qmake sous Qt 6 : la ligne
+# pourrait disparaître, on la garde explicite parce qu'elle documente ce que le code exige.
+CONFIG += c++17
 CONFIG += strict_c++
 
 QMAKE_CXXFLAGS_RELEASE += -O2
