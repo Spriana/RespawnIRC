@@ -38,11 +38,11 @@ Sur une machine vierge, `bootstrap-windows.ps1` fait tout ce que décrivent les 
 
 C'est d'ailleurs sous cette forme que `bootstrap-windows.ps1` affiche les commandes de la suite quand il a fini. Les sections ci-dessous gardent la forme courte, qui est celle d'un shell où les scripts sont autorisés.
 
-Le script n'utilise pas git et ne récupère rien : il fait partie du dépôt, vous l'avez donc déjà. En revanche **la façon dont vous avez obtenu ce dépôt compte pour la suite**, et il vaut mieux le savoir avant d'installer 4,5 Go. Avec un `git clone`, tout fonctionne. Avec une archive zip téléchargée depuis GitHub, la compilation et `run-windows.ps1` fonctionnent, mais pas `dist-windows.ps1` : il extrait `resources/` et `themes/` avec `git archive HEAD`, et une archive décompressée n'est pas un dépôt — l'échec arriverait tard, après une compilation complète. Sur un zip il faut de plus lever la marque de provenance que Windows y met, sans quoi le script est bloqué même avec `Bypass` (`Unblock-File .\bootstrap-windows.ps1`).
+Le script n'utilise pas git et ne récupère rien : il fait partie du dépôt, vous l'avez donc déjà. En revanche **la façon dont vous avez obtenu ce dépôt compte pour la suite**, et il vaut mieux le savoir avant d'installer 7 Go. Avec un `git clone`, tout fonctionne. Avec une archive zip téléchargée depuis GitHub, la compilation et `run-windows.ps1` fonctionnent, mais pas `dist-windows.ps1` : il extrait `resources/` et `themes/` avec `git archive HEAD`, et une archive décompressée n'est pas un dépôt — l'échec arriverait tard, après une compilation complète. Sur un zip il faut de plus lever la marque de provenance que Windows y met, sans quoi le script est bloqué même avec `Bypass` (`Unblock-File .\bootstrap-windows.ps1`).
 
-Il installe les Build Tools, Qt 5.15.2 avec QtWebEngine, compile Hunspell et zlib, récupère OpenSSL en vérifiant son empreinte SHA-256, et pose le tout dans la disposition attendue par les `.pro`. Compter une trentaine de minutes et environ 4,5 Go, presque entièrement pour les Build Tools (3,3 Go) et Qt (0,9 Go).
+Il installe les Build Tools, Qt 6.11.2 avec QtWebEngine, compile Hunspell et zlib, et pose le tout dans la disposition attendue par les `.pro`. Compter une trentaine de minutes et environ 7 Go, presque entièrement pour les Build Tools (3,3 Go) et Qt (3,8 Go une fois installé, pour 0,5 Go téléchargés). Il n'y a plus d'étape OpenSSL depuis le passage à Qt 6, qui se rabat sur Schannel, le TLS natif de Windows.
 
-Les cinq étapes ont maintenant tourné, l'installation des Build Tools comprise : elle a été exécutée par le script sur une machine virtuelle vierge, sans MSVC ni Qt, suivie de la compilation du programme, des tests et de la fabrication de l'archive. Elle avait longtemps été la seule branche jamais empruntée, faute d'une machine où désinstaller les Build Tools pour réessayer. Ce qui reste supposé et non constaté, c'est le seul traitement du code de retour 3010 — redémarrage conseillé — comme un succès : les deux installations observées ont rendu 0.
+Les quatre étapes ont toutes tourné — elles étaient cinq avant que celle d'OpenSSL ne disparaisse —, l'installation des Build Tools comprise : elle a été exécutée par le script sur une machine virtuelle vierge, sans MSVC ni Qt, suivie de la compilation du programme, des tests et de la fabrication de l'archive. L'étape Qt, elle, a été rejouée en entier depuis le passage à Qt 6, vers un dossier jetable, pour vérifier qu'elle installe bien les 3,8 Go attendus sans passer par aqtinstall. Elle avait longtemps été la seule branche jamais empruntée, faute d'une machine où désinstaller les Build Tools pour réessayer. Ce qui reste supposé et non constaté, c'est le seul traitement du code de retour 3010 — redémarrage conseillé — comme un succès : les deux installations observées ont rendu 0.
 
 **Cette installation des Build Tools est la seule étape à demander confirmation**, et il faut savoir pourquoi : c'est de loin la plus lourde — 3,3 Go, un quart d'heure, le processeur occupé tout du long — et l'invite UAC qui la suit s'affiche dans la seconde, trop vite pour qu'on ait le temps de lire ce qu'on est en train d'autoriser. Le script annonce donc ce qu'il va faire et attend une entrée. Il précise aussi ce que l'invite UAC annonce — **« Visual Studio Installer »**, éditeur vérifié **« Microsoft Corporation »** — de quoi accorder l'élévation à cet installateur précis plutôt qu'à un script dont on ne sait pas ce qu'il élève. La demande n'apparaît **que si les Build Tools manquent** : sur une machine déjà équipée, ou avec `-SkipBuildTools`, le script ne demande rien et reste bon à relancer sans surveillance. `-Yes` s'en passe.
 
@@ -72,11 +72,13 @@ La variante historique reste valable :
 
 Elle installe la même chose plus WebView2 et Microsoft Edge, dont la compilation de RespawnIRC n'a aucun besoin, pour environ 5 Go. Il n'y a pas de raison de la préférer.
 
-Qt 5.15.2 est la dernière version dont les binaires sont librement téléchargeables. [aqtinstall](https://github.com/miurahr/aqtinstall) les récupère sans demander de compte Qt, et publie un exécutable autonome qui évite d'installer Python :
+Le dépôt en ligne de Qt sert les binaires de toutes les versions de Qt 6 sans demander de compte, et `bootstrap-windows.ps1` y va directement : il lit l'`Updates.xml` de la version voulue, télécharge les archives `.7z` qui y sont listées et les extrait dans `C:\Qt\6.11.2\msvc2022_64`.
 
-    aqt.exe install-qt windows desktop 5.15.2 win64_msvc2019_64 -m qtwebengine --outputdir C:\Qt
+**Il n'utilise pas [aqtinstall](https://github.com/miurahr/aqtinstall)**, et ce n'est pas un choix d'élégance : Qt a changé la disposition de son dépôt à partir de la 6.11 — l'`Updates.xml` est passé de `qt6_<v>/qt6_<v>/` à `qt6_<v>/qt6_<v>/<arch>/` — et aucune version publiée d'aqt ne sait l'installer. Le correctif est fusionné dans son dépôt depuis mars 2026, mais aucune version n'a été publiée depuis juin 2025, ni sur GitHub ni sur PyPI. Lire l'`Updates.xml` soi-même tient en une cinquantaine de lignes et retire de la chaîne un outil tiers, ce qui compte pour un projet qui prévoit de rester sur 6.12 pendant des années.
 
-`qtmultimedia` fait partie de l'installation de base, seul `qtwebengine` doit être demandé en plus.
+Sous Qt 6, `qtdeclarative` fait partie du paquet de base ; `qtmultimedia`, `qtpositioning` et `qtwebchannel` sont demandés en plus, et `qtwebengine` vient d'un arbre à part, celui des « Extensions », où il a été déplacé à partir de Qt 6.8.
+
+Le seul outil supplémentaire est `7za.exe`, que le script prend chez NuGet en vérifiant son empreinte SHA-256 : les archives de Qt sont des `.7z` en LZMA, et le `tar` livré avec Windows ne connaît pas ce codec.
 
 #### Hunspell et zlib
 
@@ -120,19 +122,19 @@ Pour mémoire, mesuré sur une même machine : la compilation à la main demande
 
 Vérifiez dans tous les cas les noms de bibliothèques réellement obtenus plutôt que de supposer ceux d'ici, ils changent avec les versions et les méthodes de compilation — un zlib compilé en statique par CMake donne un `zlibstatic.lib`, par exemple. C'est à ça que servent les deux `..._LIB_NAME` quand le nom ne tombe pas juste.
 
-#### OpenSSL
+#### TLS : plus rien à installer
 
-**Sans OpenSSL, le programme démarre mais ne peut joindre aucune page.** Qt 5.15.2 est compilé contre OpenSSL 1.1.1 et charge `libssl-1_1-x64.dll` et `libcrypto-1_1-x64.dll` à l'exécution pour tout ce qui est HTTPS ; en leur absence `QSslSocket::supportsSsl()` est faux et toutes les requêtes échouent, sans message clair. `windeployqt` ne les copie pas, et Qt ne les distribue plus : son dépôt ne contient plus que `tools_opensslv3_x64`, dont l'interface binaire est incompatible avec ce que Qt 5.15.2 va chercher.
+**Il n'y a plus d'étape OpenSSL.** Qt 5.15.2 chargeait `libssl-1_1-x64.dll` et `libcrypto-1_1-x64.dll` à l'exécution pour tout ce qui est HTTPS, et en leur absence `QSslSocket::supportsSsl()` était faux et toutes les requêtes échouaient sans message clair. Comme Qt ne distribuait plus le 1.1.1, il fallait aller le chercher ailleurs et vivre avec une bibliothèque non maintenue depuis septembre 2023.
 
-Il faut donc les récupérer ailleurs et les poser dans un dossier `openssl\bin` à la racine du dépôt, à côté de `hunspell` et `zlib`. La version utilisée pour la distribution actuelle est celle de [FireDaemon](https://firedaemon.com/download-firedaemon-openssl), signée et accompagnée d'une empreinte SHA-256 à vérifier.
+Qt 6 a des greffons de chiffrement interchangeables et se rabat sur **Schannel**, le TLS natif de Windows, quand OpenSSL est absent. Le dossier `openssl\` du dépôt, les deux DLL de l'archive et l'étape correspondante du bootstrap ont donc disparu ensemble.
 
-Attention : **OpenSSL 1.1.1 n'est plus maintenu depuis septembre 2023**. C'est un choix assumé faute d'alternative simple, Qt 5.15.2 ne sachant pas parler à OpenSSL 3. S'en affranchir demanderait de recompiler Qt depuis les sources avec `-schannel`, pour utiliser le TLS natif de Windows.
+La réserve qui pesait sur ce changement est levée : le programme parle à jeuxvideo.com en HTTP/2, qui se négocie par ALPN, et rien ne garantissait d'avance que le greffon Schannel le fasse aussi bien. Vérifié sur une vraie requête — greffon `schannel` actif, `Secure Channel, Windows 10.0.19044` comme bibliothèque TLS, HTTP/2 négocié, aucun en-tête `cf-mitigated` de Cloudflare, et le payload de la page bien reçu.
 
 #### Compiler
 
     .\build-windows.ps1
 
-Sans argument, il prend le Qt dont le `qmake` est dans le `PATH`, et à défaut celui que `bootstrap-windows.ps1` a installé dans `C:\Qt` : au sortir d'un amorçage il n'y a donc rien à lui passer. Un Qt installé ailleurs se désigne avec `-QtDir C:\chemin\vers\Qt\5.15.2\msvc2019_64`, et un Qt ainsi désigné n'est jamais remplacé en douce par un autre. Dans les deux cas, les Qt sans QtWebEngine sont écartés en le disant — celui pour MinGW n'en a pas, Chromium ne se compilant qu'avec MSVC, et sans ce test l'échec n'arrivait qu'au `Unknown module(s) in QT: webenginewidgets` de `qmake`, qui ne dit pas quel Qt a été pris. Le script retrouve aussi tout seul l'environnement MSVC avec `vswhere`, il n'a donc pas besoin d'être lancé depuis une invite de commandes développeur. La compilation se fait hors des sources, dans `build\respawnIrc`, comme sur les deux autres plateformes : le dossier de sources reste propre et il n'y a rien à ignorer dedans. Les objets déjà compilés sont repris, `-Clean` recompile tout.
+Sans argument, il prend le Qt dont le `qmake` est dans le `PATH`, et à défaut celui que `bootstrap-windows.ps1` a installé dans `C:\Qt` : au sortir d'un amorçage il n'y a donc rien à lui passer. Un Qt installé ailleurs se désigne avec `-QtDir C:\chemin\vers\Qt\6.11.2\msvc2022_64`, et un Qt ainsi désigné n'est jamais remplacé en douce par un autre. Dans les deux cas, les Qt sans QtWebEngine sont écartés en le disant — celui pour MinGW n'en a pas, Chromium ne se compilant qu'avec MSVC, et sans ce test l'échec n'arrivait qu'au `Unknown module(s) in QT: webenginewidgets` de `qmake`, qui ne dit pas quel Qt a été pris. Le script retrouve aussi tout seul l'environnement MSVC avec `vswhere`, il n'a donc pas besoin d'être lancé depuis une invite de commandes développeur. La compilation se fait hors des sources, dans `build\respawnIrc`, comme sur les deux autres plateformes : le dossier de sources reste propre et il n'y a rien à ignorer dedans. Les objets déjà compilés sont repris, `-Clean` recompile tout.
 
 Avec `-Tests`, il compile aussi `tests\tests.pro` dans `build\tests` et lance les vérifications. Avec un Hunspell venant de vcpkg, ajoutez `-HunspellLibName hunspell-1.7` ; c'est le même argument que celui de `dist-windows.ps1`, qui appelle ce script plutôt que d'avoir sa propre copie de ces étapes.
 
@@ -158,7 +160,7 @@ Et le piège qui suit, constaté : revenir au dossier de release et y relancer `
 
 `build-windows.ps1` n'est pas exposé à ce piège, ni `dist-windows.ps1` qui l'appelle : il efface `RespawnIRC.exe` avant `nmake`, ce qui force l'édition de liens et garantit que ce qui sort de là est bien issu des objets de son propre dossier. La distribution effaçait auparavant tout `build\respawnIrc`, ce qui donnait la même garantie en recompilant les 45 sources à chaque archive ; le dossier est maintenant repris tel quel, et `-Clean` rend l'ancien comportement. Le piège ne mord donc plus que sur les compilations tapées à la main, la compilation de débogage en tête.
 
-Les objets intermédiaires restent dans `build\respawnIrc` ; `RespawnIRC.exe`, lui, est produit dans `build\`, où la compilation dépose aussi `resources\` et `themes\` que `pathTool::dataDirPath()` va chercher à côté de lui. Il lui manque encore les DLL de Qt et celles d'OpenSSL, sans quoi il ne démarre pas ; inutile pour autant de passer par l'archive de `dist-windows.ps1`, il suffit de les avoir dans le `PATH`. C'est ce que fait `run-windows.ps1` :
+Les objets intermédiaires restent dans `build\respawnIrc` ; `RespawnIRC.exe`, lui, est produit dans `build\`, où la compilation dépose aussi `resources\` et `themes\` que `pathTool::dataDirPath()` va chercher à côté de lui. Il lui manque encore les DLL de Qt, sans quoi il ne démarre pas ; inutile pour autant de passer par l'archive de `dist-windows.ps1`, il suffit de les avoir dans le `PATH`. C'est ce que fait `run-windows.ps1` :
 
     .\run-windows.ps1
 
@@ -190,13 +192,13 @@ Trois dossiers sont allégés parce que `windeployqt` copie tout par défaut : l
 
 Une seule chose manque encore à une machine vierge, et l'archive l'embarque : les **bibliothèques C++ de MSVC**. Elles ne font partie d'aucun Windows, elles arrivent avec le redistribuable Visual C++, et sans elles le programme ne démarre pas du tout. C'est facile à vérifier sur une machine neuve : `ucrtbase.dll` est bien dans `System32`, `msvcp140.dll` et `vcruntime140.dll` n'y sont pas. Un piège en le faisant : `System32` contient un `msvcp140_clr0400.dll` et un `vcruntime140_clr0400.dll`, copies privées du .NET Framework sans usage ici — un `dir msvcp140*` trouve donc quelque chose et peut faire conclure l'inverse.
 
-Le script copie **tout le dossier `Microsoft.VC*.CRT`** du redistribuable, soit dix DLL pour 1,8 Mo, et non une liste de noms choisis. C'est une correction, pas un choix de départ : il embarquait `vcruntime140.dll`, `vcruntime140_1.dll` et `msvcp140.dll`, et il manquait **`msvcp140_1.dll`**, que `Qt5Core.dll` et `Qt5Widgets.dll` importent. Toute archive produite avant cette correction échoue donc au lancement sur une machine sans redistribuable, avec « The code execution cannot proceed because MSVCP140_1.dll was not found » — constaté sur un Windows 10 LTSC 2019 propre. La dépendance vient des binaires précompilés de Qt 5.15.2 et non de la compilation faite ici : elle ne dépend pas de la version des Build Tools, et elle a toujours été là.
+Le script copie **tout le dossier `Microsoft.VC*.CRT`** du redistribuable, soit dix DLL pour 1,8 Mo, et non une liste de noms choisis. C'est une correction, pas un choix de départ : il embarquait `vcruntime140.dll`, `vcruntime140_1.dll` et `msvcp140.dll`, et il manquait **`msvcp140_1.dll`**, que `Qt6Core.dll` et `Qt6Widgets.dll` importent. Toute archive produite avant cette correction échoue donc au lancement sur une machine sans redistribuable, avec « The code execution cannot proceed because MSVCP140_1.dll was not found » — constaté sur un Windows 10 LTSC 2019 propre. La dépendance vient des binaires précompilés de Qt et non de la compilation faite ici : elle ne dépend pas de la version des Build Tools, et elle a toujours été là.
 
-Depuis, le script **vérifie avant de compresser** qu'aucun binaire de l'archive ne réclame une DLL du runtime C++ absente de l'archive, en relevant les imports au `dumpbin`. Ce contrôle ne remplace pas un essai sur une vraie machine sans redistribuable — il ne voit pas ce qui serait chargé par `LoadLibrary`, comme OpenSSL — mais il rend impossible la répétition exacte de cette panne.
+Depuis, le script **vérifie avant de compresser** qu'aucun binaire de l'archive ne réclame une DLL du runtime C++ absente de l'archive, en relevant les imports au `dumpbin`. Ce contrôle ne remplace pas un essai sur une vraie machine sans redistribuable — il ne voit pas ce qui serait chargé par `LoadLibrary` — mais il rend impossible la répétition exacte de cette panne.
 
 **L'archive corrigée a été essayée sur une machine virtuelle vierge sous Windows 10 LTSC 2019, celle-là même où la précédente échouait, et le programme fonctionne.** Les deux vérifications sont complémentaires et aucune ne rend l'autre inutile : celle du script tourne à chaque archive et attrape une régression immédiatement, l'essai sur machine vierge juge le résultat entier mais dépend de quelqu'un qui y pense.
 
-S'y ajoute OpenSSL, traité dans sa propre section plus haut, pour une raison sans rapport avec la version de Windows : Qt le charge à l'exécution et ne le distribue plus.
+OpenSSL ne s'y ajoute plus : Qt 6 se rabat sur Schannel, voir la section correspondante plus haut.
 
 Le reste de la pile de DLL qui accompagnait historiquement le programme n'existait que pour **Windows 7, qui n'est plus une cible** :
 
@@ -230,6 +232,8 @@ Il ne reste utile que si ANGLE lui-même échoue, ou si quelqu'un force `QT_OPEN
 
 ### Linux
 
+> **Cette section est antérieure au passage à Qt 6 et ne fonctionne plus telle quelle.** Le code C++ du programme est porté sur Qt 6, mais seul Windows l'est de bout en bout : les paquets et les commandes ci-dessous désignent Qt 5, contre lequel le programme ne compile plus. Le portage de Linux reste à faire, et les paquets à installer seront ceux de Qt 6 (`qt6-base-dev`, `qt6-multimedia-dev`, `qt6-webengine-dev` et leurs équivalents).
+
 Pour Linux, installez les paquets `qtbase5-dev qtmultimedia5-dev libhunspell-dev qtwebengine5-dev zlib1g-dev`. Les noms des paquets sont ceux pour Debian, si vous utilisez une autre distribution ils peuvent changer.
 
 La compilation tient ensuite en une commande :
@@ -259,6 +263,8 @@ Seuls les objets intermédiaires restent dans `build/respawnIrc` ; le `DESTDIR` 
 La copie de `resources/` et `themes/` se fait à chaque édition de liens. Un thème modifié sans qu'un `.cpp` bouge n'aurait donc rien à relier, et ne parviendrait jamais au programme : le `.pro` fait des fichiers de ces deux dossiers des prérequis de l'exécutable, de sorte que `make` relie pour eux aussi. Le prix est une édition de liens pour un thème modifié.
 
 ### macOS
+
+> **Cette section est antérieure au passage à Qt 6 et ne fonctionne plus telle quelle.** Le code C++ du programme est porté sur Qt 6, mais seul Windows l'est de bout en bout : `build-unix.sh`, `unix-common.sh` et `dist-macos.sh` désignent toujours un Qt 5.15.2, contre lequel le programme ne compile plus. Le portage de macOS reste à faire. Deux choses changeront à ce moment-là et sont déjà connues : Homebrew fournit QtWebEngine en Qt 6, ce que son `qt@5` ne fait plus, et Qt 6 existe en arm64 natif — l'application cesserait donc de tourner sous Rosetta 2 sur un Mac Apple Silicon. Le plancher système monterait en revanche à macOS 13.
 
 zlib vient du système, mais le paquet `qt@5` de Homebrew est livré **sans QtWebEngine** (retiré parce que son Chromium a des failles non corrigées) alors que RespawnIRC en a besoin. Il faut donc le Qt 5.15.2 officiel, que [aqtinstall](https://github.com/miurahr/aqtinstall) récupère sans demander de compte Qt :
 

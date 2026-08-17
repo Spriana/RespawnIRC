@@ -1,5 +1,73 @@
 # RespawnIRC — passage à Qt 6
 
+> **Le portage est fait pour Windows, le 17 août 2026, sur Qt 6.11.2.** Ce document garde
+> l'analyse d'origine telle qu'elle était écrite **avant** toute compilation : il ne décrit donc
+> plus l'état du dépôt, et sert désormais à deux choses — retrouver le raisonnement qui a mené aux
+> arbitrages, et savoir sur quoi il s'est trompé. La section « Ce que l'exécution a démenti », juste
+> en dessous, liste les points faux ; **c'est elle qu'il faut lire avant de se fier à une
+> affirmation de ce fichier**. L'état réel est dans `CLAUDE.md`, en tête.
+>
+> macOS et Linux, eux, ne sont **pas** portés : tout ce que ce document dit d'eux reste à faire.
+
+---
+
+## Ce que l'exécution a démenti
+
+Les conclusions et l'ordre de travail ci-dessous ont tenu — le portage s'est déroulé comme prévu, et
+aucun arbitrage n'a changé de sens. Les **détails**, eux, ont mal vieilli, et c'est la leçon à en
+retenir : une analyse peut être juste sur le fond et fausse sur ce qu'on recopie sans revérifier.
+
+**Ce qui manquait complètement à la table A :**
+
+- **`qsizetype`.** Qt 6 fait passer `size()`, `count()`, `indexOf()` et `lastIndexOf()` de `int` à
+  `qsizetype`, et vingt endroits tronquaient le résultat. Le document n'en dit pas un mot. Piège
+  supplémentaire, découvert en route : ces conversions **ne produisent aucun avertissement**, ni à
+  `/W3` ni à `/W4`, parce que Qt désactive lui-même le C4244 dans le bloc `QT_NO_WARNINGS` de
+  `qcompilerdetection.h`. Il faut définir `QT_CC_WARNINGS` pour les voir — ce qui sort aussi 4844
+  C4251 venant des en-têtes de Qt ;
+- **`QRegularExpression::OptimizeOnFirstUsageOption`**, supprimée par Qt 6. C'est la seule API
+  retirée du portage qui ne vienne pas de `QRegExp`, et elle se cachait dans
+  `configDependentVar.hpp`, c'est-à-dire dans du code que le document donnait explicitement pour
+  déjà porté. Elle est la base des quelque cinquante expressions du programme : **plus rien ne
+  compilait** tant qu'elle était là ;
+- **l'`operator+` entre `Qt::Modifier` et `Qt::Key`**, que Qt 6 déclare `deleted`. Il faut
+  `operator|`, qui rend une `QKeyCombination`. Vingt et un raccourcis clavier concernés ;
+- **`QMessageBox::setButtonText`**, dépréciée, et **`QFile::open` devenue `[[nodiscard]]`** — cette
+  dernière ayant révélé un vrai défaut, un fichier d'image écrit sans vérifier son ouverture.
+
+**Ce qui était affirmé et s'est révélé faux :**
+
+- « **QtWebEngine : rien à changer**, aucune API supprimée dans ce qui est utilisé » (section A) :
+  `QWebEnginePage::createStandardContextMenu` n'existe plus, elle est passée à `QWebEngineView` ;
+- « **QStringConverter ne connaît que l'UTF-8, l'UTF-16, l'UTF-32, le Latin-1 et l'encodage du
+  système** », d'où une perte pour un dictionnaire en ISO-8859-15 (section A) : faux pour les
+  binaires officiels de Qt, qui embarquent ICU. L'enum `Encoding` ne déclare bien que cette poignée
+  de valeurs, mais le constructeur par nom accepte plus de deux cents encodages, ISO-8859-15
+  compris. Un test garde maintenant ce constat, qui dépend de la présence d'ICU ;
+- « **aucune méthode concernée n'est `const`** », à propos du remplacement de `QTextCodec`
+  (section A) : `spellTextEdit::checkWord` et `getWordPropositions` le sont toutes les deux. Elles
+  le restent, les deux convertisseurs étant `mutable` ;
+- « **`QSoundEffect` ne passe par aucun moteur** », qui servait à justifier le retrait de FFmpeg
+  (section C) : le journal du programme affiche « Using Qt multimedia with FFmpeg version 7.1.5 »
+  dès le démarrage. FFmpeg est donc laissé dans l'archive ;
+- l'ordre de travail supposait qu'`aqtinstall` installerait Qt 6.11 : **aucune version publiée ne le
+  peut**, Qt ayant changé la disposition de son dépôt à partir de la 6.11.
+
+**Ce qui était annoncé comme un risque et n'en était pas un :**
+
+- `qMin(5, listOfWord.size())` a été présenté comme une erreur dure lors de la planification. Il
+  compile sans rien : Qt 6 a ajouté une surcharge à deux types qui promeut ses arguments ;
+- le `.pri` de qmake pour `webenginewidgets` — la question dont le document disait qu'une mauvaise
+  réponse invaliderait le plan entier — **est bien livré** avec l'extension QtWebEngine. qmake reste
+  donc viable, et la question « CMake maintenant » ne s'est pas posée.
+
+**Ce qui s'est vérifié exactement comme annoncé :** le `\w` du correcteur, qui était désigné comme
+« le point de vigilance, s'il ne devait y en avoir qu'un », et qui l'était ; les trente-deux
+emplacements de la table A, tous justes ; et le repli sur Schannel, qui négocie bien HTTP/2 et passe
+Cloudflare.
+
+---
+
 Analyse du 29 juillet 2026, branche `windows`. Portée : `respawnIrc/`, `tests/`, les deux
 `.pro` et les scripts de distribution. **Rien n'a été compilé contre Qt 6** : ce qui suit
 vient de la lecture du code et de la documentation de Qt 6.11. Les chiffres de taille, eux,

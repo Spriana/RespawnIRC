@@ -1,9 +1,37 @@
 # RespawnIRC (version PC, Qt)
 
-Client alternatif pour les forums de jeuxvideo.com, en C++/Qt5 Widgets. Le pendant
+Client alternatif pour les forums de jeuxvideo.com, en C++/Qt Widgets. Le pendant
 Android, **beaucoup plus à jour**, est dans `../../repo-android` : c'est la
 meilleure référence quand JVC change quelque chose. Regarder son `JVCParser.java` et
 son historique git avant de deviner quoi que ce soit.
+
+## État du portage vers Qt 6 — à lire avant le reste
+
+**Le code C++ est porté sur Qt 6, et seul Windows l'est de bout en bout.** Ce fichier est
+antérieur au portage sur beaucoup de points ; là où un passage parle de Qt 5.15.2, de
+`msvc2019_64`, d'OpenSSL ou d'`aqtinstall`, **c'est cette section-ci qui fait foi pour Windows**.
+Les sections macOS et Linux, elles, décrivent toujours l'état réel de ces deux plateformes.
+
+- **Windows : porté et vérifié.** Qt **6.11.2** `msvc2022_64`, C++17, compilation muette — aucun
+  avertissement, barrière `QT_DISABLE_DEPRECATED_UP_TO` comprise —, 165 vérifications sans échec,
+  archive fabriquée et licences livrées. La cible est la série **6.12 LTS**, dernière à prendre en
+  charge Windows 10 ; le passage se fera en montant `$QtVersion` et la barrière à `0x060C00` ;
+- **macOS et Linux : pas portés, et leur compilation est cassée.** C'est délibéré : le mainteneur a
+  demandé de les traiter à part pour que leurs commits soient lisibles. `unix-common.sh`,
+  `build-unix.sh` et `dist-macos.sh` désignent toujours un Qt 5.15.2, contre lequel le code ne
+  compile plus. **Rien de ce qui suit sur ces deux plateformes n'a été rejoué sous Qt 6** ;
+- **OpenSSL a entièrement disparu** du dépôt, du bootstrap et de l'archive : Qt 6 se rabat sur
+  Schannel, le TLS natif de Windows. Vérifié sur une vraie requête à jeuxvideo.com — greffon
+  `schannel` actif, HTTP/2 négocié, aucun en-tête `cf-mitigated`, payload reçu. C'était le seul
+  point capable de rendre le programme inutilisable, et il est constaté et non supposé ;
+- **`aqtinstall` n'est plus utilisé.** Qt a changé la disposition de son dépôt à partir de la 6.11 et
+  aucune version publiée d'aqt ne sait l'installer (correctif fusionné dans son master en mars 2026,
+  jamais publié). `bootstrap-windows.ps1` lit l'`Updates.xml` du dépôt de Qt lui-même ;
+- **ce qui n'a pas pu être vérifié ici**, et qu'il ne faut pas présenter autrement : les deux sons,
+  cette machine n'ayant aucun périphérique audio ; le rendu sur une machine sans accélération
+  graphique ; et le démarrage de l'archive sur une machine vierge.
+
+`MIGRATION-QT6.md` garde l'analyse d'origine et la liste des points sur lesquels elle s'est trompée.
 
 ## Compiler et tester
 
@@ -724,18 +752,23 @@ ne le fait que si `VCINSTALLDIR` est définie, donc seulement quand le script to
 qui n'apparaît pas si on essaie `windeployqt` à la main dans un shell neuf. D'où le
 `--no-compiler-runtime`, à ne pas retirer.
 
-Répartition de ce qui reste, pour situer les ordres de grandeur : sur 159 Mo décompressés (71 Mo
-compressés, 426 fichiers), **environ 124 tiennent à QtWebEngine**, soit 78 %. Chromium lui-même en
-fait 112 (`Qt5WebEngineCore.dll` seul en pèse 97, le reste étant `icudtl.dat` et ses fichiers
-`.pak`), QtQuick, QML et WebChannel 8, et ANGLE 3 (`libGLESv2.dll` et `libEGL.dll`). Attention au
-raisonnement : RespawnIRC est une application Widgets, qui dessine en raster et n'utilise ni QML ni
-OpenGL — tout cela n'est là que parce que WebEngine s'en sert. Le client lui-même, avec Qt Core, Gui,
-Widgets, Network, OpenSSL et les runtimes, pèse une trentaine de mégaoctets.
+Répartition de ce qui reste, mesurée sur l'archive Qt 6 : **442 fichiers, 299 Mo décompressés et
+126 Mo compressés**, dont **209 Mo pour QtWebEngine et Chromium**, soit 70 %. `Qt6WebEngineCore.dll`
+en fait 194 à lui seul, le reste étant `icudtl.dat` et les `.pak`. Viennent ensuite **FFmpeg pour
+18 Mo** (`avcodec`, `avformat`, `avutil`, `swresample`, `swscale`, laissés en place faute de pouvoir
+vérifier les sons ici) et **`dxcompiler.dll` avec `dxil.dll` pour 15 Mo**, le compilateur de nuanceurs
+de Direct3D 12, que Qt 6 embarque et que Qt 5 n'avait pas. Attention au raisonnement : RespawnIRC est
+une application Widgets, qui dessine en raster et n'utilise ni QML ni Direct3D — tout cela n'est là
+que parce que WebEngine s'en sert.
 
-Ces chiffres sont ceux de l'archive Windows 10. Celle qui visait Windows 7 en faisait 184 avec les
-mêmes composants : 6 Mo de différence tiennent à l'Universal CRT et à `D3Dcompiler_47.dll`, et 20 au
-seul `opengl32sw.dll`. Le poids n'était la raison d'aucun des trois retraits, mais il explique que le
-dernier soit le plus visible.
+**L'archive a doublé de taille en passant à Qt 6** : 159 Mo décompressés et 71 compressés sous Qt
+5.15.2, contre 299 et 126 ici. L'essentiel vient de Chromium, qui passe de 97 à 194 Mo pour sa seule
+DLL — six ans de Chromium en plus. FFmpeg et le compilateur Direct3D, absents sous Qt 5, ajoutent
+33 Mo à eux deux. C'est le prix du Chromium récent, qui est aussi le principal bénéfice du portage.
+
+Pour mémoire, l'archive qui visait Windows 7 faisait 184 Mo avec les composants de Qt 5 : 6 Mo de
+différence tenaient à l'Universal CRT et à `D3Dcompiler_47.dll`, et 20 au seul `opengl32sw.dll` — que
+le `windeployqt` de Qt 6 ne copie plus du tout, ANGLE ayant disparu.
 
 Windows 7 n'est plus une cible, et n'avait de toute façon **jamais été essayé** : sa compatibilité
 était raisonnée d'après la documentation de Microsoft, sans machine pour la vérifier.
@@ -797,21 +830,25 @@ un seul vrai point, l'autre étant réglé.
   dossier de compilation séparé qu'ils imposent, et surtout le `LNK4098` de zlib, qui est ce que
   cette tâche avait de moins évident : le correctif que CLAUDE.md décrivait — Hunspell seul — laissait
   une CRT release dans le binaire de débogage sans que rien n'échoue ;
-- **OpenSSL 1.1.1 n'est plus maintenu depuis septembre 2023 et il est distribué tel quel.** Aucun
-  rangement de la chaîne de compilation n'y touche : il faut Qt 6, ou recompiler Qt 5.15.2 avec
-  `-schannel` pour le TLS de Windows. C'est le sujet de `MIGRATION-QT6.md`, et le seul point restant
-  qui soit une exposition et non du confort. À l'échelle de « ce qui reste pour Windows », il pèse
-  plus lourd que tout le reste réuni : ce qui subsiste, au fond, c'est d'être arrimé à un Qt et à une
-  bibliothèque TLS tous deux en fin de vie. **La migration est néanmoins repoussée**, décision du
-  mainteneur : le projet reste sur Qt 5.15.2 et OpenSSL 1.1.1 pour l'instant, l'exposition étant connue
-  et assumée. Les conclusions de `MIGRATION-QT6.md` tiennent et son ordre de travail est inchangé, mais ne pas
-  entreprendre le portage sans le mainteneur. Ce document a été relu ligne à ligne le 31 juillet 2026, code en
-  main : des numéros de ligne avaient dérivé, sa table des API supprimées était incomplète — il lui manquait le
-  `QTextStream::setCodec` de `tests/main.cpp`, qui est justement dans la première étape de son plan — et deux de
-  ses justifications étaient fausses, celle du retrait de FFmpeg et celle de la durée de vie libre d'une branche
-  LTS. Aucun arbitrage n'a changé de sens pour autant. La leçon est celle du dépôt tout entier : **une analyse
-  dont les conclusions sont bonnes peut avoir des détails faux**, et ce sont les détails qu'on recopie sans les
-  revérifier le jour où on l'exécute.
+- ~~**OpenSSL 1.1.1 n'est plus maintenu depuis septembre 2023 et il est distribué tel quel.**~~
+  **Fait**, et c'était le seul point restant qui fût une exposition et non du confort. Le portage vers
+  Qt 6 l'a supprimé en entier : plus d'OpenSSL nulle part, Qt 6 se rabattant sur Schannel. Voir la
+  section « État du portage vers Qt 6 » en tête de ce fichier.
+
+  Ce que ce portage a appris, et qui vaut au-delà de lui : `MIGRATION-QT6.md` avait de bonnes
+  conclusions et beaucoup de détails faux. Il annonçait « QtWebEngine : rien à changer » alors que
+  `createStandardContextMenu` a changé de classe ; il ne mentionnait ni `qsizetype`, ni
+  `QRegularExpression::OptimizeOnFirstUsageOption` que Qt 6 supprime — laquelle se cachait dans du
+  code qu'il donnait pour déjà porté et bloquait toute compilation —, ni la suppression de
+  l'`operator+` entre modificateurs de touches, qui touche les vingt et un raccourcis ; il annonçait
+  une perte d'encodages pour les dictionnaires qui n'a pas lieu, les binaires officiels de Qt
+  embarquant ICU ; et son argument pour retirer FFmpeg est démenti par le journal du programme. La
+  leçon est celle du dépôt tout entier : **une analyse dont les conclusions sont bonnes peut avoir
+  des détails faux**, et ce sont les détails qu'on recopie sans les revérifier le jour où on
+  l'exécute. Trois de ces points sont désormais gardés par des tests plutôt que par des commentaires ;
+
+- **macOS et Linux ne sont pas portés**, et c'est maintenant le vrai « ce qui reste » — mais pour les
+  deux autres plateformes, pas pour Windows. Leur compilation est cassée tant que ce n'est pas fait.
 
 Les pistes de `POSSIBLE-BUILD-SIMPLIFICATIONS.md` étaient du confort et rien n'y cassait si elles
 attendaient ; **les onze sont maintenant faites**, la dernière étant la compilation hors des sources
