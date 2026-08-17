@@ -33,6 +33,34 @@ Les sections macOS et Linux, elles, décrivent toujours l'état réel de ces deu
 
 `MIGRATION-QT6.md` garde l'analyse d'origine et la liste des points sur lesquels elle s'est trompée.
 
+### Ce qui reste à faire, et que le mainteneur garde pour lui
+
+Trois chantiers, laissés ouverts sciemment le 17 août 2026 et **à ne pas entamer sans lui** :
+
+1. **Porter macOS et Linux.** `unix-common.sh`, `build-unix.sh` et `dist-macos.sh` désignent un Qt
+   5.15.2 contre lequel le code ne compile plus : les deux plateformes sont cassées en attendant. Le
+   découpage a été demandé pour que leurs commits soient lisibles, ce n'est pas un oubli. Ce qui les
+   attend est déjà connu : Homebrew fournit QtWebEngine en Qt 6 — ce que son `qt@5` ne fait plus,
+   donc le détour par `aqtinstall` devient facultatif —, Qt 6 existe en **arm64 natif**, si bien que
+   l'application cesse de tourner sous Rosetta 2 sur un Mac Apple Silicon, et le plancher système
+   monte de 10.13 à **macOS 13**. Ce dernier point rouvre le choix du format du DMG, ULMO devenant
+   acceptable : voir la section macOS et la piste 16 de `POSSIBLE-BUILD-SIMPLIFICATIONS.md`. Côté
+   Debian, les paquets deviennent `qt6-base-dev`, `qt6-multimedia-dev` et `qt6-webengine-dev` ;
+2. **Essayer l'archive sur une machine vierge.** C'est la seule vérification qui juge le résultat
+   entier : le contrôle au `dumpbin` tourne à chaque archive mais ne voit que les imports statiques,
+   et ne dit rien de ce qui se charge par `LoadLibrary`. C'est exactement ce qui avait laissé sortir
+   une archive sans `msvcp140_1.dll`, et le piège reste entier — installer les Build Tools sur la
+   machine d'essai la disqualifie, en posant la famille `msvcp140*` dans `System32` ;
+3. **Écouter les deux sons**, sur une machine qui a une carte son, et en profiter pour trancher la
+   question de FFmpeg : ses cinq DLL pèsent 17,9 Mo et `dist-windows.ps1` les garde faute de pouvoir
+   vérifier ici que `QSoundEffect` s'en passe.
+
+Deux décisions prises et à ne pas rouvrir sans raison neuve : **le C++ reste en c++17**, minimum
+exigé par Qt 6 et défaut de qmake — le programme entier compile aussi proprement en `c++20`, essayé,
+mais ce que celui-ci apporterait ici est nul, et le plafond de qmake est de toute façon `c++20`, il
+n'y a pas de `c++23`. Et **qmake est gardé**, la question « CMake maintenant » ayant été tranchée par
+la présence du `.pri` de `webenginewidgets` dans l'extension QtWebEngine.
+
 ## Compiler et tester
 
 Chaque bloc part de la racine du dépôt. **Rien ne se compile plus dans les sources** : les deux
