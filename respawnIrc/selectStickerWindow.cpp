@@ -127,7 +127,7 @@ clickableLabelClass* selectStickerWindowClass::createQLabelForStickerTypeWithThe
     image.load(pathTool::pathForReading("resources/" + imageName));
     image = image.scaled(50, 50, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
-    palette.setColor(QPalette::Background, Qt::transparent);
+    palette.setColor(QPalette::Window, Qt::transparent);
     imageView->setPalette(palette);
     imageView->setAutoFillBackground(true);
     imageView->setMargin(3);
@@ -465,10 +465,10 @@ void selectStickerWindowClass::labelClicked(Qt::MouseButton buttonClicked, int l
     {
         QPalette tmpPalette;
 
-        tmpPalette.setColor(QPalette::Background, Qt::transparent);
+        tmpPalette.setColor(QPalette::Window, Qt::transparent);
         listOfLabels.at(oldLabelSelected)->setPalette(tmpPalette);
 
-        tmpPalette.setColor(QPalette::Background, QColor(styleTool::getColorInfo().selectedStickerTypeColor));
+        tmpPalette.setColor(QPalette::Window, QColor(styleTool::getColorInfo().selectedStickerTypeColor));
         listOfLabels.at(labelID)->setPalette(tmpPalette);
         stickerTypeListscrollArea->ensureWidgetVisible(listOfLabels.at(labelID), 0, 0);
         loadAndUseListOfStickers(labelID);
