@@ -54,7 +54,7 @@ selectStickerWindowClass::selectStickerWindowClass(QWidget* parent) : baseDialog
     layoutOfStickerTypeList->addWidget(createQLabelForStickerTypeWithThesesInfos("stickers/1ptd.png", mainWidgetOfStickerTypeList));
     listOfStickerTypeContent.resize(listOfLabels.size());
 
-    layoutOfStickerTypeList->setMargin(1);
+    layoutOfStickerTypeList->setContentsMargins(1, 1, 1, 1);
     layoutOfStickerTypeList->setSpacing(0);
     mainWidgetOfStickerTypeList->setObjectName("stickerTypeList");
     mainWidgetOfStickerTypeList->setLayout(layoutOfStickerTypeList);
@@ -65,7 +65,7 @@ selectStickerWindowClass::selectStickerWindowClass(QWidget* parent) : baseDialog
     QHBoxLayout* stickerLayout = new QHBoxLayout();
     stickerLayout->addWidget(stickerBrowser, 1);
     stickerLayout->addWidget(stickerTypeListscrollArea);
-    stickerLayout->setMargin(0);
+    stickerLayout->setContentsMargins(0, 0, 0, 0);
     stickerLayout->setSpacing(0);
 
     QCheckBox* saveLastStickerTypeUsedCheckbox = new QCheckBox("Sauvegarder le dernier type de sticker utilisé", this);
@@ -77,12 +77,12 @@ selectStickerWindowClass::selectStickerWindowClass(QWidget* parent) : baseDialog
     bottomLayout->addWidget(saveLastStickerTypeUsedCheckbox);
     bottomLayout->addStretch(1);
     bottomLayout->addWidget(stickerInfoLabel);
-    bottomLayout->setMargin(5);
+    bottomLayout->setContentsMargins(5, 5, 5, 5);
 
     QVBoxLayout* mainLayout = new QVBoxLayout();
     mainLayout->addLayout(stickerLayout, 1);
     mainLayout->addLayout(bottomLayout);
-    mainLayout->setMargin(0);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
     if(saveLastStickerTypeUsedCheckbox->isChecked() == true)
