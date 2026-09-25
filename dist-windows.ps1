@@ -96,7 +96,16 @@ Write-Host "== Copie de Qt à côté de l'exécutable"
 # qui font doublon avec les DLL du runtime copiées plus bas. Il ne le copie que lorsque
 # VCINSTALLDIR est définie, donc uniquement quand le script est lancé après vcvars64.bat, ce qui est
 # toujours le cas ici : sans cet argument le gras dépend de la façon dont on appelle le script.
-Invoke-BuildTool -Name 'windeployqt' -Command { & $windeployqtBin --release --no-compiler-runtime (Join-Path $imageDir 'RespawnIRC.exe') }
+#
+# --no-ffmpeg et --exclude-plugins ffmpegmediaplugin écartent FFmpeg, 18 Mo : ses cinq DLL et le
+# greffon multimédia qui les charge. Le programme ne demande à QtMultimedia que ses deux sons, et
+# QSoundEffect joue les .wav sans FFmpeg : ils ont été entendus sur un Windows 10 vierge, ces DLL
+# retirées. --no-ffmpeg ne retire que les DLL et laisserait le greffon, incapable de se charger.
+# Sans lui, Qt prend le moteur de Windows, windowsmediaplugin, qui reste. Rien de tout cela n'est un
+# import statique : si un son se taisait, le contrôle au dumpbin plus bas ne le verrait pas.
+Invoke-BuildTool -Name 'windeployqt' -Command {
+    & $windeployqtBin --release --no-compiler-runtime --no-ffmpeg --exclude-plugins ffmpegmediaplugin (Join-Path $imageDir 'RespawnIRC.exe')
+}
 
 Write-Host "== Allègement"
 # windeployqt copie les traductions de toutes les langues : le programme est en français, on ne
