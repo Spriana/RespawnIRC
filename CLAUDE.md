@@ -1,9 +1,108 @@
 # RespawnIRC (version PC, Qt)
 
-Client alternatif pour les forums de jeuxvideo.com, en C++/Qt5 Widgets. Le pendant
+Client alternatif pour les forums de jeuxvideo.com, en C++/Qt Widgets. Le pendant
 Android, **beaucoup plus à jour**, est dans `../../repo-android` : c'est la
 meilleure référence quand JVC change quelque chose. Regarder son `JVCParser.java` et
 son historique git avant de deviner quoi que ce soit.
+
+## État du portage vers Qt 6 — à lire avant le reste
+
+**Le code C++ est porté sur Qt 6, et seul Windows l'est de bout en bout.** Ce fichier est
+antérieur au portage sur beaucoup de points ; là où un passage parle de Qt 5.15.2, de
+`msvc2019_64`, d'OpenSSL ou d'`aqtinstall`, **c'est cette section-ci qui fait foi pour Windows**.
+Les sections macOS et Linux, elles, décrivent toujours l'état réel de ces deux plateformes.
+
+- **Windows : porté et vérifié.** Qt **6.11.2** `msvc2022_64`, C++17, compilation sans avertissement,
+  162 vérifications sans échec, archive fabriquée. Elle démarre sur un Windows 10 1809 vierge, sans redistribuable Visual C++,
+  connexion et envoi de message compris (essayé le 25 septembre 2026). Windows 10 1809 est le
+  minimum de Qt 6.11 comme de 6.12, et le README l'annonce. La cible est la série **6.12 LTS**,
+  dernière à prendre en charge Windows 10 ; le passage se fera en montant `$QtVersion` ;
+- **macOS et Linux : pas portés, et leur compilation est cassée.** C'est délibéré : le mainteneur a
+  demandé de les traiter à part pour que leurs commits soient lisibles. `unix-common.sh`,
+  `build-unix.sh` et `dist-macos.sh` désignent toujours un Qt 5.15.2, contre lequel le code ne
+  compile plus. **Rien de ce qui suit sur ces deux plateformes n'a été rejoué sous Qt 6** ;
+- **OpenSSL a entièrement disparu** du dépôt, du bootstrap et de l'archive : Qt 6 se rabat sur
+  Schannel, le TLS natif de Windows. Vérifié sur une vraie requête à jeuxvideo.com — greffon
+  `schannel` actif, HTTP/2 négocié, aucun en-tête `cf-mitigated`, payload reçu. C'était le seul
+  point capable de rendre le programme inutilisable, et il est constaté et non supposé ;
+- **`aqtinstall` n'est plus utilisé.** Qt a changé la disposition de son dépôt à partir de la 6.11 et
+  aucune version publiée d'aqt ne sait l'installer (correctif fusionné dans son master en mars 2026,
+  jamais publié). `bootstrap-windows.ps1` lit l'`Updates.xml` du dépôt de Qt lui-même, vérifie
+  chaque archive contre le `.sha256` que download.qt.io publie à côté d'elle, et fait après
+  l'extraction ce que l'installateur de Qt fait : un `qt.conf` dans `bin` et la licence libre dans
+  `qconfig.pri` ;
+- **ce qui n'a pas été vérifié**, et qu'il ne faut pas présenter autrement : les deux sons, et le
+  rendu sur une machine sans accélération graphique.
+
+Le README a été réécrit par le mainteneur le 22 août 2026 (c751639) : les renvois de ce fichier au
+README visent l'ancien texte, qui se lit à 8501535.
+
+`MIGRATION-QT6.md` garde l'analyse d'origine et la liste des points sur lesquels elle s'est trompée.
+
+### Ce qui reste à faire, et que le mainteneur garde pour lui
+
+Les chantiers laissés ouverts sciemment le 17 août 2026, **à ne pas entamer sans lui** :
+
+1. **Porter macOS et Linux.** `unix-common.sh`, `build-unix.sh` et `dist-macos.sh` désignent un Qt
+   5.15.2 contre lequel le code ne compile plus : les deux plateformes sont cassées en attendant. Le
+   découpage a été demandé pour que leurs commits soient lisibles, ce n'est pas un oubli. Ce qui les
+   attend est déjà connu : Homebrew fournit QtWebEngine en Qt 6 — ce que son `qt@5` ne fait plus,
+   donc le détour par `aqtinstall` devient facultatif —, Qt 6 existe en **arm64 natif**, si bien que
+   l'application cesse de tourner sous Rosetta 2 sur un Mac Apple Silicon, et le plancher système
+   monte de 10.13 à **macOS 13**. Ce dernier point rouvre le choix du format du DMG, ULMO devenant
+   acceptable : voir la section macOS et la piste 16 de `POSSIBLE-BUILD-SIMPLIFICATIONS.md`. Côté
+   Debian, les paquets deviennent `qt6-base-dev`, `qt6-multimedia-dev` et `qt6-webengine-dev` ;
+2. **Écouter les deux sons sur une vraie machine.** Ils ont été entendus sur un Windows 10 LTSC
+   2019 vierge, en VM, et c'est ce qui a tranché la question de FFmpeg : sans ses cinq DLL,
+   `QSoundEffect` joue les deux `.wav` avec le moteur de Windows, et `dist-windows.ps1` ne les
+   embarque plus (18 Mo). Reste ce qu'une VM à une seule carte son ne montre pas : le changement de
+   sortie audio pendant que le programme tourne. La VM rogne aussi parfois le début du bip après un
+   silence, `SoundPlayer` de Windows compris : c'est son chemin audio, pas Qt, mais une vraie
+   machine le confirmerait ;
+3. **Alléger l'archive de 15 Mo de plus**, si un essai du navigateur interne le permet :
+   `windeployqt` a un `--no-system-dxc-compiler` (`dxcompiler.dll` et `dxil.dll`, 15,1 Mo). **Le
+   piège est identifié** : aucune de ces DLL n'est un import statique, donc les retirer ne casse pas
+   le démarrage et **échappe au contrôle au `dumpbin` du script** — la panne n'apparaîtrait qu'à
+   l'usage. FFmpeg avait le même piège, d'où l'écoute des deux sons avant de le retirer ;
+4. **Optionnel, et à ne pas confondre avec les précédents : remplacer QtWebEngine par WebView2.**
+   Simple note d'intention, rien n'a été étudié. L'idée se défend d'elle-même au vu des chiffres
+   ci-dessous — le seul `Qt6WebEngineCore.dll` fait 194 Mo, soit 69 % de l'archive, et WebView2
+   s'appuie sur l'Edge du système au lieu d'embarquer son propre Chromium. Ce serait aussi la fin du
+   « Chromium figé » qu'impose le gel sur 6.12, puisque celui du système est mis à jour par Windows.
+   En face : ce n'est pas un module Qt, l'intégration serait à écrire, et les deux usages actuels
+   (page de connexion et « RespawnIRC Navigator ») seraient à reprendre. **À examiner avec le
+   mainteneur avant tout travail.**
+
+### Pourquoi l'archive a presque doublé
+
+Mesuré sur l'archive Qt 6 : 280 Mo décompressés, dont **257,8 dans 32 fichiers à la racine**, et
+**194 pour le seul `Qt6WebEngineCore.dll`** — 69 % du total dans un fichier. Tout le reste réuni,
+Qt Core, Gui, Widgets, Network, le programme lui-même et les runtimes MSVC, pèse une trentaine de
+mégaoctets, comme sous Qt 5.
+
+L'augmentation de 121 Mo par rapport à Qt 5.15.2 se décompose ainsi, et **il n'y a pas de gras
+caché** :
+
+| Poste | Delta | Remédiable ? |
+| --- | --- | --- |
+| Chromium (`Qt5WebEngineCore` 97 Mo → `Qt6WebEngineCore` 194 Mo) | +97 Mo | non, sauf à compiler Chromium soi-même |
+| `dxcompiler.dll` et `dxil.dll`, absents de Qt 5 | +15 Mo | peut-être, voir le point 3 |
+| ANGLE (`libGLESv2`, `libEGL`), abandonné par Qt 6 | −3 Mo | déjà acquis |
+| FFmpeg, absent de Qt 5, que `windeployqt` copie par défaut | 0, ses 18 Mo sont retirés | déjà acquis, voir le point 2 |
+
+**Les quatre cinquièmes de l'augmentation sont donc six ans de Chromium**, ce qui est aussi le
+principal bénéfice du portage : le programme tournait sur le Chromium de 2020. Ce n'est pas un coût
+qu'on peut négocier tout en gardant QtWebEngine — d'où le point 4.
+
+Ce qui n'est **pas** la cause, et qu'il ne faut pas aller chercher : le dossier `qml/` est vide, les
+traductions sont déjà réduites au français, les outils de développement de Chromium sont déjà
+retirés, et `opengl32sw.dll` — 20 Mo sous Qt 5 — n'est plus copié du tout.
+
+Deux décisions prises et à ne pas rouvrir sans raison neuve : **le C++ reste en c++17**, minimum
+exigé par Qt 6 et défaut de qmake — le programme entier compile aussi proprement en `c++20`, essayé,
+mais ce que celui-ci apporterait ici est nul, et le plafond de qmake est de toute façon `c++20`, il
+n'y a pas de `c++23`. Et **qmake est gardé**, la question « CMake maintenant » ayant été tranchée par
+la présence du `.pri` de `webenginewidgets` dans l'extension QtWebEngine.
 
 ## Compiler et tester
 
@@ -543,9 +642,6 @@ déjà équipée, et qui a coûté des essais :
   d'administrateur dans le dépôt. L'invite **n'apparaît que si les Build Tools manquent** : le test
   de `vswhere.exe` rend la main avant, donc une machine déjà équipée ne demande rien. Une reprise,
   ou un `-SkipBuildTools`, n'élève rien non plus ;
-- `aqt` écrit un `aqtinstall.log` dans le **dossier courant**. Le script l'appelle donc depuis
-  `build\bootstrap` : sans ce `Push-Location`, le fichier atterrit à la racine du dépôt et apparaît
-  dans `git status`. Ne pas « simplifier » ce détour ;
 - le script est **réentrant**, chaque étape se sautant si son résultat est déjà là. C'est ce qui rend
   une reprise après échec sans douleur — utile si les Build Tools rendent 3010, code qui signale un
   redémarrage conseillé et que le script traite comme un succès, mais qui pourrait demander un vrai
@@ -724,18 +820,23 @@ ne le fait que si `VCINSTALLDIR` est définie, donc seulement quand le script to
 qui n'apparaît pas si on essaie `windeployqt` à la main dans un shell neuf. D'où le
 `--no-compiler-runtime`, à ne pas retirer.
 
-Répartition de ce qui reste, pour situer les ordres de grandeur : sur 159 Mo décompressés (71 Mo
-compressés, 426 fichiers), **environ 124 tiennent à QtWebEngine**, soit 78 %. Chromium lui-même en
-fait 112 (`Qt5WebEngineCore.dll` seul en pèse 97, le reste étant `icudtl.dat` et ses fichiers
-`.pak`), QtQuick, QML et WebChannel 8, et ANGLE 3 (`libGLESv2.dll` et `libEGL.dll`). Attention au
-raisonnement : RespawnIRC est une application Widgets, qui dessine en raster et n'utilise ni QML ni
-OpenGL — tout cela n'est là que parce que WebEngine s'en sert. Le client lui-même, avec Qt Core, Gui,
-Widgets, Network, OpenSSL et les runtimes, pèse une trentaine de mégaoctets.
+Répartition de ce qui reste, mesurée sur l'archive Qt 6 : **432 fichiers, 280 Mo décompressés et
+118 Mo compressés**, dont **209 Mo pour QtWebEngine et Chromium**, soit 75 %. `Qt6WebEngineCore.dll`
+en fait 194 à lui seul, le reste étant `icudtl.dat` et les `.pak`. Vient ensuite **`dxcompiler.dll`
+avec `dxil.dll` pour 15 Mo**, le compilateur de nuanceurs de Direct3D 12, que Qt 6 embarque et que
+Qt 5 n'avait pas. Attention au raisonnement : RespawnIRC est une application Widgets, qui dessine en
+raster et n'utilise ni QML ni Direct3D — tout cela n'est là que parce que WebEngine s'en sert.
+FFmpeg (`avcodec`, `avformat`, `avutil`, `swresample`, `swscale`, 18 Mo) et son greffon ne sont plus
+livrés : les deux sons ont été écoutés sans eux, voir le commentaire de `dist-windows.ps1`.
 
-Ces chiffres sont ceux de l'archive Windows 10. Celle qui visait Windows 7 en faisait 184 avec les
-mêmes composants : 6 Mo de différence tiennent à l'Universal CRT et à `D3Dcompiler_47.dll`, et 20 au
-seul `opengl32sw.dll`. Le poids n'était la raison d'aucun des trois retraits, mais il explique que le
-dernier soit le plus visible.
+**L'archive a presque doublé de taille en passant à Qt 6** : 159 Mo décompressés et 71 compressés
+sous Qt 5.15.2, contre 280 et 118 ici. L'essentiel vient de Chromium, qui passe de 97 à 194 Mo pour
+sa seule DLL — six ans de Chromium en plus. Le compilateur Direct3D, absent sous Qt 5, ajoute 15 Mo.
+C'est le prix du Chromium récent, qui est aussi le principal bénéfice du portage.
+
+Pour mémoire, l'archive qui visait Windows 7 faisait 184 Mo avec les composants de Qt 5 : 6 Mo de
+différence tenaient à l'Universal CRT et à `D3Dcompiler_47.dll`, et 20 au seul `opengl32sw.dll` — que
+le `windeployqt` de Qt 6 ne copie plus du tout, ANGLE ayant disparu.
 
 Windows 7 n'est plus une cible, et n'avait de toute façon **jamais été essayé** : sa compatibilité
 était raisonnée d'après la documentation de Microsoft, sans machine pour la vérifier.
@@ -797,21 +898,27 @@ un seul vrai point, l'autre étant réglé.
   dossier de compilation séparé qu'ils imposent, et surtout le `LNK4098` de zlib, qui est ce que
   cette tâche avait de moins évident : le correctif que CLAUDE.md décrivait — Hunspell seul — laissait
   une CRT release dans le binaire de débogage sans que rien n'échoue ;
-- **OpenSSL 1.1.1 n'est plus maintenu depuis septembre 2023 et il est distribué tel quel.** Aucun
-  rangement de la chaîne de compilation n'y touche : il faut Qt 6, ou recompiler Qt 5.15.2 avec
-  `-schannel` pour le TLS de Windows. C'est le sujet de `MIGRATION-QT6.md`, et le seul point restant
-  qui soit une exposition et non du confort. À l'échelle de « ce qui reste pour Windows », il pèse
-  plus lourd que tout le reste réuni : ce qui subsiste, au fond, c'est d'être arrimé à un Qt et à une
-  bibliothèque TLS tous deux en fin de vie. **La migration est néanmoins repoussée**, décision du
-  mainteneur : le projet reste sur Qt 5.15.2 et OpenSSL 1.1.1 pour l'instant, l'exposition étant connue
-  et assumée. Les conclusions de `MIGRATION-QT6.md` tiennent et son ordre de travail est inchangé, mais ne pas
-  entreprendre le portage sans le mainteneur. Ce document a été relu ligne à ligne le 31 juillet 2026, code en
-  main : des numéros de ligne avaient dérivé, sa table des API supprimées était incomplète — il lui manquait le
-  `QTextStream::setCodec` de `tests/main.cpp`, qui est justement dans la première étape de son plan — et deux de
-  ses justifications étaient fausses, celle du retrait de FFmpeg et celle de la durée de vie libre d'une branche
-  LTS. Aucun arbitrage n'a changé de sens pour autant. La leçon est celle du dépôt tout entier : **une analyse
-  dont les conclusions sont bonnes peut avoir des détails faux**, et ce sont les détails qu'on recopie sans les
-  revérifier le jour où on l'exécute.
+- ~~**OpenSSL 1.1.1 n'est plus maintenu depuis septembre 2023 et il est distribué tel quel.**~~
+  **Fait**, et c'était le seul point restant qui fût une exposition et non du confort. Le portage vers
+  Qt 6 l'a supprimé en entier : plus d'OpenSSL nulle part, Qt 6 se rabattant sur Schannel. Voir la
+  section « État du portage vers Qt 6 » en tête de ce fichier.
+
+  Ce que ce portage a appris, et qui vaut au-delà de lui : `MIGRATION-QT6.md` avait de bonnes
+  conclusions et beaucoup de détails faux. Il annonçait « QtWebEngine : rien à changer » alors que
+  `createStandardContextMenu` a changé de classe ; il ne mentionnait ni `qsizetype`, ni
+  `QRegularExpression::OptimizeOnFirstUsageOption` que Qt 6 supprime — laquelle se cachait dans du
+  code qu'il donnait pour déjà porté et bloquait toute compilation —, ni la suppression de
+  l'`operator+` entre modificateurs de touches, qui touche les vingt et un raccourcis ; il annonçait
+  une perte d'encodages pour les dictionnaires qui n'a pas lieu, les binaires officiels de Qt
+  embarquant ICU ; et son argument pour retirer FFmpeg est démenti par le journal du programme,
+  même si la conclusion a tenu une fois les deux sons écoutés sans lui. La leçon est celle du dépôt
+  tout entier : **une analyse dont les conclusions sont bonnes peut avoir des détails faux**, et ce
+  sont les détails qu'on recopie sans les revérifier le jour où on l'exécute. Deux des changements
+  que Qt 6 fait en silence sont désormais gardés par des tests, la frontière de mot du correcteur et
+  la relecture d'un `config.ini` écrit par Qt 5 ;
+
+- **macOS et Linux ne sont pas portés**, et c'est maintenant le vrai « ce qui reste » — mais pour les
+  deux autres plateformes, pas pour Windows. Leur compilation est cassée tant que ce n'est pas fait.
 
 Les pistes de `POSSIBLE-BUILD-SIMPLIFICATIONS.md` étaient du confort et rien n'y cassait si elles
 attendaient ; **les onze sont maintenant faites**, la dernière étant la compilation hors des sources
